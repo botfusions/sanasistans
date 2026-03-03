@@ -1,0 +1,7 @@
+# Use this file to ignore files from Docker context
+node_modules
+dist
+npm-debug.log
+.env
+.git
+*.tsbuildinfo

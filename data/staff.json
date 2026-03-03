@@ -1,0 +1,73 @@
+[
+  {
+    "id": "1",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Karkas Üretimi)",
+    "department": "Karkas Üretimi",
+    "role": "Personnel"
+  },
+  {
+    "id": "2",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Metal Üretimi)",
+    "department": "Metal Üretimi",
+    "role": "Personnel"
+  },
+  {
+    "id": "3",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Mobilya Dekorasyon)",
+    "department": "Mobilya Dekorasyon",
+    "role": "Personnel"
+  },
+  {
+    "id": "4",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Dikişhane)",
+    "department": "Dikişhane",
+    "role": "Personnel"
+  },
+  {
+    "id": "5",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Döşemehane)",
+    "department": "Döşemehane",
+    "role": "Personnel"
+  },
+  {
+    "id": "6",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Boyahane)",
+    "department": "Boyahane",
+    "role": "Personnel"
+  },
+  {
+    "id": "7",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Kalite Kontrol)",
+    "department": "Kalite Kontrol",
+    "role": "Personnel"
+  },
+  {
+    "id": "8",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Paketleme)",
+    "department": "Paketleme",
+    "role": "Personnel"
+  },
+  {
+    "id": "9",
+    "telegramId": 6030287709,
+    "name": "Test Personeli (Sevkiyat)",
+    "department": "Sevkiyat",
+    "role": "Personnel"
+  },
+  {
+    "id": "99",
+    "telegramId": 6030287709,
+    "name": "Marina Hanım (Test)",
+    "department": "Yönetim",
+    "role": "Admin",
+    "isMarina": true
+  }
+]
