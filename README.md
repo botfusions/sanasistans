@@ -1,68 +1,69 @@
-# Ayça - Sandaluci Yönetici Asistanı 🚀 hardware_security
+# Sandaluci ASistan 🚀
 
-Ayça, Sandaluci firması için özel olarak tasarlanmış, **Yalın Kültür (Lean Culture)** ve **Stratejik Hizalama (Hoshin Kanri)** prensiplerini benimsemiş zeki bir yönetici asistanıdır.
+Sandaluci firması için özel olarak tasarlanmış, **Yalın Kültür (Lean Culture)** ve **Stratejik Hizalama (Hoshin Kanri)** prensiplerini benimsemiş zeki bir yönetici asistanı ve operasyon yönetim sistemidir.
 
-## 🌟 Temel Özellikler
+## 🌟 Öne Çıkan Özellikler
 
-### 1. Akıllı Personel ve Departman Yönetimi (RBAC)
+### 1. Akıllı Yönetim Paneli (Dashboard)
 
-- **Rol Tabanlı Erişim:** Sistem "Patron" (Cenk Bey) ve "Personel" rollerinden oluşur.
-- **Kayıt:** `/kayit İsim | Departman | TelegramID` komutuyla sadece **Patron** tarafından personel eklenir.
-- **Silme:** `/sil TelegramID` komutuyla sadece **Patron** tarafından personel kaydı silinir.
-- **Yönlendirme:** İlgili departman personeli görevler/siparişler için otomatik olarak etiketlenir.
-- **Liste:** `/personel` komutuyla tüm ekip ve uzmanlık alanları görülebilir (Sadece Patron'a özel detaylar içerir).
+- **Modern Arayüz:** Next.js 15 ve KokonutUI ile güçlendirilmiş, karanlık mod destekli premium dashboard.
+- **Canlı Takip:** [sanasist.turklawai.com](https://sanasist.turklawai.com) adresi üzerinden veya Supabase Realtime ile siparişlerin ve üretim durumunun anlık izlenmesi.
+- **Analitik:** Sipariş istatistikleri, personel performans metrikleri ve departman bazlı yoğunluk grafikleri.
+- **Güvenlik:** Supabase Auth ve Next.js Middleware ile korunan yetkili erişim katmanı.
 
-### 2. Gelişmiş Sipariş ve Koordinasyon Sistemi (Gmail & Excel)
+### 2. Akıllı Sipariş ve Koordinasyon
 
-- **Çoklu Format Desteği:** Mağazadan gelen siparişler e-posta metni veya **Excel (.xlsx)** eki olarak otomatik okunur.
-- **Görsel Hafıza (Qdrant):** Excel'den çıkarılan ürün resimleri Gemini 2.0 Flash ile analiz edilir ve vektör hafızasına (Qdrant) kaydedilir.
-- **Otomatik Arşivleme:** Gelen tüm sipariş formları `data/orders/YYYY-MM-DD/` dizininde tarihli olarak yedeklenir.
-- **Akıllı Kategorizasyon:** Ayça, her ürünü analiz ederek kaynağını belirler (Stok, Üretim, Dış Alım).
-- **Görsel Koordinasyon Özeti:** Tüm birimlerin anlayabileceği, gruplandırılmış ve temiz bir iş akışı tablosu Telegram'a iletilir.
-- **Departman Bazlı PDF:** Her birim için resimli, detaylı ve resmi bir PDF İş Emri oluşturulup Telegram üzerinden gönderilir.
-- **Görsel Albüm Desteği:** Çoklu ürün görselleri Telegram "Media Group" özelliği ile düzenli bir albüm olarak iletilir.
-- **Ekip Etiketleme:** İlgili personel görev alanına göre @mention ile anlık bilgilendirilir.
+- **Çoklu Format Desteği:** Gmail üzerinden gelen siparişlerin metin veya Excel (.xlsx) formatında otomatik işlenmesi.
+- **Vektör Hafızası (Qdrant):** Ürün görsellerinin vektörleştirilerek yapay zeka hafızasına kaydedilmesi ve benzer ürün sorgulama yeteneği.
+- **Otomatik İş Emri (PDF):** Her departman için (Döşeme, Dikişhane, Kumaş vb.) resimli, profesyonel PDF iş emirlerinin otomatik oluşturulması.
+- **Görsel Albüm:** Sipariş görsellerinin Telegram üzerinden düzenli albümler halinde ilgili birimlere iletilmesi.
 
-### 3. Otomatik Ekip Kontrol Sistemi (Cron)
+### 3. Ekip Kontrolü ve RBAC
 
-Günde üç kez ekibin nabzını tutan periyodik mesajlar:
+- **Rol Tabanlı Erişim:** "Patron" (Administrator) ve "Personel" rolleri arasında net yetki ayrımı.
+- **Whitelist Güvenliği:** Sadece tanımlı Telegram kullanıcı id'lerine hizmet veren güvenlik katmanı.
+- **Periyodik Nabız (Cron):** Sabah planlama, öğlen darboğaz tespiti ve akşam raporlama döngüleri.
 
-- **09:00 (Sabah):** "Engel var mı?" ve planlama brifingi.
-- **13:30 (Öğlen):** Darboğaz tespiti ve saha uyumu.
-- **17:30 (Akşam):** Standartlaştırma ve başarı raporu.
+## 🛡️ Güvenlik, Altyapı ve Yapay Zeka Kuralları (Mart 2026 Güncellemesi)
 
-### 4. Yönetici Brifingleri (Cenk Bey Özel)
+Proje, kapsamlı bir güvenlik denetiminden (STRIDE) geçirilmiş ve üretim ortamına (VPS) hazır hale getirilmiştir:
 
-- Gmail ve Google Takvim üzerinden alınan verilerle günlük ajanda ve stratejik odak özeti sunulur.
+- **Sanitasyon & Sıfırlama:** Tüm veritabanları (Supabase ve JSON) test verilerinden tamamen temizlendi. Proje "sıfır sipariş" mantığıyla yayına hazır hale getirildi. Hardcoded API anahtarları `.env` dosyasına taşındı.
+- **Konteyner Güvenliği:** Docker üzerinde `USER node` (non-root) kullanımı ile güvenlik sertleştirilmiştir.
+- **Kesin Kırmızı Çizgiler (Soul.md):** Ayça asistanının personel ile iş dışı sohbet etmesi, felsefi yorum yapması veya dış dünyadan dedikodu/siyaset gibi bilgi çekmesi **kesin olarak yasaklanmıştır.**
+- **Build Hardening:** TypeScript ve ESLint kontrolleri sıkılaştırılarak hatalı kodun yayına girmesi engellenmiştir.
 
-## 🛠️ Teknik Altyapı
+## 🛠️ Teknik Stack
 
-- **Dil:** TypeScript / Node.js
-- **Bot Framework:** Grammy
-- **LLM:** OpenRouter API (Google Gemini 2.0 Flash / Ayça Persona)
-- **Vektör Veritabanı:** Qdrant (Görsel ürün hafızası için)
-- **Veritabanı:** Yerel JSON (Staff/Orders) - Personel bilgileri ve aktif siparişler için.
-- **PDF Motoru:** PDFKit (İş emri üretimi için)
-- **E-posta:** Gmail IMAP (ImapFlow) & SMTP (Nodemailer)
-- **Planlama:** node-cron
-- **Deployment:** Coolify (Dockerized)
-- **Health Check:** HTTP Server (Port 3000)
+- **Frontend:** Next.js 15, React 19, Tailwind CSS, Lucide React.
+- **Backend:** Node.js, Grammy (Telegram Framework), Supabase (DB & Auth).
+- **AI/ML:** OpenRouter (Gemini 2.0 Flash), Qdrant (Vector Search).
+- **Altyapı:** Docker, Coolify, Gmail IMAP/SMTP.
 
-## 🔄 Son Teknik Güncellemeler (Mart 2026)
+## 🚀 Kurulum ve Dağıtım
 
-- **Görsel Hafıza ve Arşivleme:** Qdrant entegrasyonu ile ürün görselleri vektörleştirildi; sipariş formları tarihli klasörlerde yerel olarak yedeklenmeye başlandı.
-- **Resimli PDF İş Emirleri:** Departmanlar için ürün resimlerini içeren teknik PDF belgeleri oluşturma yeteneği eklendi.
-- **Telegram Albüm (Media Group):** E-posta ve Excel'den gelen çoklu görsellerin departmanlara düzenli albümler halinde iletilmesi sağlandı.
-- **Gmail Bağlantı Kararlılığı:** `ImapFlow` nesnesinin yeniden kullanım hatası (`Can not re-use instance`) giderildi; her kontrol periyodunda yeni bağlantı kurulumuna geçildi.
-- **Hata Toleranslı Bildirimler:** Telegram'da Markdown formatlama hatası oluşması durumunda, sistemin sessizce çökmesi yerine bildirimleri **sade metin (Plain Text)** olarak iletmesi sağlandı.
-- **Gelişmiş İzlenebilirlik:** `pino-pretty` entegrasyonu ile e-posta işleme, LLM analizi ve Telegram iletim aşamaları için detaylı loglama yapısı kuruldu.
-- **E-posta Kontrol Optimizasyonu:** Varsayılan 5 dakikalık kontrol süresi, test süreçleri için `index.ts` üzerinden 1 dakikaya indirildi.
-- **Sonsuz Döngü Koruması:** E-postaların işlendikten sonra (hata alsa dahi) okundu olarak işaretlenmesi garanti altına alınarak bildirim döngüleri engellendi.
-- **Güçlendirilmiş Excel Resim Ayıklama:** Kopyala-yapıştır ile eklenen ve hücreye sabitlenmemiş (floating) resimleri yakalayan **Fallback Mekanizması** eklendi; ekran görüntüleri ile gerçek ürün fotoğrafları arasında ayrım yapan **Skorlama Algoritması** devreye alındı.
-- **PDF Görselleştirme (Screenshot):** Departmanlara artık PDF yerine, PDF'in yüksek kaliteli (3.0 scale) görsel kopyası gönderiliyor. Bu sayede personel PDF indirmeden siparişi anlık görebiliyor.
-- **Yüksek Kalite Render & Font Uyumluluğu:** PDF'den görsel üretilirken metinlerin bozulmaması için **Roboto** fontları entegre edildi ve Windows tabanlı `file:///` protokolü uyumluluğu sağlandı.
-- **Konsolide Bildirim (Albüm):** Siparişin görsel özeti (PDF screenshot) ve tüm ürün fotoğrafları tek bir Telegram albümü (Media Group) olarak birleştirildi.
-- **Otomatik PDF Arşivleme:** Oluşturulan tüm PDF iş emirleri `data/orders/YYYY-MM-DD/pdfs/` klasöründe yerel olarak saklanarak dijital arşivleme altyapısı kuruldu.
+### 1. Çevre Değişkenleri
+
+`.env.example` dosyasını `.env` olarak kopyalayın ve gerekli anahtarları doldurun:
+
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+- `OPENROUTER_API_KEY`, `QDRANT_API_KEY`
+- `GMAIL_USER`, `GMAIL_PASS` (App Password)
+
+### 2. Docker ile Çalıştırma
+
+```bash
+# Bot ve Dashboard'u ayağa kaldırın
+docker build -t sandaluci-asistan .
+docker run --env-file .env -p 3000:3000 sandaluci-asistan
+```
+
+### 3. Coolify Dağıtımı
+
+- Coolify üzerinde "Dockerize" uygulama olarak ekleyin.
+- Webhook'ları ve Health Check (Port 3000) ayarlarını yapılandırın.
+- `.env` içeriğini Coolify "Variables" sekmesine aktarın.
 
 ---
 

@@ -162,36 +162,44 @@ export class OrderService {
     const prompt = `
       Sen bir Sandaluci Üretim Asistanısın (Ayça). Aşağıdaki ${isExcel ? "Excel verisinden (JSON formatında)" : "e-posta içeriğinden"} sipariş detaylarını çıkartmanı istiyorum.
       
+      🚨 KRİTİK KURAL: Bir ürünün üretilmesi birden fazla departmanı ilgilendiriyorsa (Örn: Hem karkas üretilmeli, hem dikiş dikilmeli, hem döşeme yapılmalı), o ürünü her departman için AYRI BİRER KALEM olarak oluşturmalısın.
+      Sipariş dağıtımı şu akışa göre yapılmalı:
+      - Ahşap/İskelet kısmı -> Karkas Üretimi
+      - Metal kısımlar -> Metal Üretimi
+      - Kumaş/Deri kesim ve dikim -> Dikişhane
+      - Son birleştirme ve sünger/döşeme -> Döşemehane
+      - Cilalama/Boyama -> Mobilya Dekorasyon
+
       İçerik:
       ${content}
       
       Lütfen şu JSON formatında yanıt ver:
       {
         "orderNumber": "Email içinden veya konu başlığından varsa al, yoksa 'OTOMATIK'",
-        "customerName": "Müşteri adı (Excel'de genellikle ilk satırlarda veya başlıkta olur)",
+        "customerName": "Müşteri adı ve Şehir (Örn: Маржан, город Жетисай). İçerikte geçen lokasyon bilgisini mutlaka ekle.",
         "items": [
           {
             "product": "Ürün adı/kodu",
-            "department": "İlgili departmanı seç: Karkas Üretimi | Metal Üretimi | Mobilya Dekorasyon | Dikişhane | Döşemehane",
+            "department": "Karkas Üretimi | Metal Üretimi | Mobilya Dekorasyon | Dikişhane | Döşemehane",
             "quantity": 1,
-            "details": "Ölçü, boya kodu vb. genel detaylar",
+            "details": "Ölçü, boya kodu, işçilik detayları vb.",
             "fabricDetails": {
-               "name": "Eğer ürün döşemeli ise kumaşın adını/kodunu buraya yaz",
+               "name": "Kumaş adı/kodu (Sadece Dikiş/Döşeme için)",
                "amount": 1.5
             },
             "source": "Stock | Production | External",
-            "rowIndex": "Veri Excel'den geliyorsa, ilgili satırın '_rowNumber' değerini buraya sayı olarak yaz."
+            "rowIndex": "Veri Excel'den geliyorsa, ilgili satırın '_rowNumber' değerini sayı olarak yaz."
           }
         ],
         "deliveryDate": "Varsa termin tarihi, yoksa 'Belirtilmedi'"
       }
 
       Önemli Kurallar:
-      1. Excel verisi geliyorsa, her bir ürün satırı için bir 'items' girdisi oluştur. 
-      2. Müşteri adını ve sipariş numarasını bulmak için tüm içeriğe bak.
-      3. 'source' alanını Ayça zekasıyla belirle.
-      4. ASLA ama ASLA internetten resim arama, web sitesi URL'si uydurma veya görsel hafızadan otomatik resim çekme. Sadece verilen 'rowIndex' değerini ata.
-      5. JSON Dışında hiçbir açıklama veya metin ekleme. Sadece saf JSON döndür.
+      1. Kompleks bir ürünü (Örn: Döşemeli Sandalye) parçalarına böl: 1-Karkas, 2-Dikişhane, 3-Döşemehane şeklinde 3 ayrı item oluştur.
+      2. Müşteri adını ve Şehir/Lokasyon bilgisini tüm içerikten (imza, başlık, metin) dikkatle çıkart.
+      3. Rusça isimleri ve şehirleri (Kiril alfabesi) olduğu gibi koru.
+      4. 'source' alanını ürünün durumuna göre belirle.
+      5. JSON Dışında hiçbir açıklama ekleme. Sadece saf JSON döndür.
     `;
 
     try {

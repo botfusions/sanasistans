@@ -3,24 +3,49 @@ import { ProductionService } from "../utils/production.service";
 import { QdrantService } from "../utils/qdrant.service";
 import { OpenRouterService } from "../utils/llm.service";
 import { StaffService } from "../utils/staff.service";
+import { OrderService } from "../utils/order.service";
+import { VoiceService } from "../utils/voice.service";
 
 export class MessageHandler {
   private productionService: ProductionService;
   private qdrantService: QdrantService;
   private llmService: OpenRouterService;
   private staffService: StaffService;
+  private orderService: OrderService;
+  private voiceService: VoiceService;
 
   constructor() {
     this.productionService = new ProductionService();
     this.qdrantService = new QdrantService();
     this.llmService = new OpenRouterService();
     this.staffService = new StaffService();
+    this.orderService = new OrderService();
+    this.voiceService = new VoiceService();
   }
 
   public async handle(ctx: Context) {
-    if (!ctx.message || !ctx.message.text) return;
+    if (!ctx.message) return;
 
-    const originalText = ctx.message.text;
+    let originalText = "";
+
+    if (ctx.message.text) {
+      originalText = ctx.message.text;
+    } else if (ctx.message.voice) {
+      await ctx.reply("🎙️ Sesli mesajınızı dinliyorum, lütfen bekleyin...");
+      const transcribedText = await this.voiceService.transcribeVoiceMessage(ctx, ctx.message.voice.file_id);
+      
+      if (!transcribedText) {
+        await ctx.reply("❌ Sesli mesajınızı çözümleyemedim veya OpenAI API anahtarı ayarlanmamış.");
+        return;
+      }
+      
+      await ctx.reply(`_"${transcribedText}"_`, { parse_mode: "Markdown" });
+      originalText = transcribedText;
+    } else {
+      // Desteklenmeyen bir mesaj tipi, text veya voice değil
+      return;
+    }
+
     const text = originalText.toLowerCase();
     const role = (ctx as any).role;
     const staffInfo = (ctx as any).staffInfo;
@@ -110,6 +135,24 @@ export class MessageHandler {
       return;
     }
 
+    // Hatırlatıcı / Zamanlı Görev Tespiti
+    const reminderKeywords = ["hatırlat", "zamanında", "alarm kur", "haber ver", "sonra bildir"];
+    const isReminderRequest = reminderKeywords.some((kw) => text.includes(kw));
+
+    if (isReminderRequest) {
+      await this.handleReminderRequest(ctx, text, isBoss);
+      return;
+    }
+
+    // Sipariş Durum Sorgulama Tespiti
+    const statusKeywords = ["durum", "ne durumda", "hangi aşamada", "rapor", "bilgi ver"];
+    const isStatusQuery = (text.includes("sipariş") || text.includes("muşteri") || text.includes("müşteri")) && statusKeywords.some((kw) => text.includes(kw));
+
+    if (isStatusQuery && isBoss) {
+      await this.handleOrderStatusQuery(ctx, text, isBoss);
+      return;
+    }
+
     // Qdrant'tan bağlam sorgula (Opsiyonel/Geliştirilecek)
     let context = "";
     const isQdrantReady = await this.qdrantService.checkConnection();
@@ -174,6 +217,111 @@ export class MessageHandler {
     } catch (e) {
       console.error("Email parsing error:", e);
       await ctx.reply("❌ E-posta bilgilerinizi tam anlayamadım, lütfen daha açık yazar mısınız?");
+    }
+  }
+
+  private async handleReminderRequest(ctx: Context, text: string, isBoss: boolean) {
+    await ctx.reply("⏰ Hatırlatma talebinizi ayarlıyorum...");
+
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = { 
+      timeZone: "Europe/Istanbul", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" 
+    };
+    const currentTime = now.toLocaleString("tr-TR", options);
+
+    const prompt = `
+      Kullanıcı senden bir hatırlatma ayarlamanı istiyor. Aşağıdaki metinden hatırlatılacak mesajı ve zamanını (cron formatında) çıkar.
+      Zaman çıkarımı yaparken şunlara dikkat et:
+      - Türkiye saati (UTC+3) kullanıyoruz. Şu anki zaman: ${currentTime}
+      - Cron formatı sırasıyla şunlardır: Dakika(0-59) Saat(0-23) Gün(1-31) Ay(1-12) HaftanınGünü(0-7)
+      - Örnek: "10 dakika sonra" -> şu anki dakikaya 10 ekle ve mod 60 al. Saati gerekirse artır.
+      - Örnek: "Yarın sabah 9'da" -> "0 9 <yarınki_gun> <yarınki_ay> *"
+      - Örnek: "Cenk bey'e karkasları sor" -> mesaj bu olacak.
+
+      Lütfen YALNIZCA aşağıdaki JSON formatında yanıt ver, başka hiçbir açıklama ekleme:
+      {
+        "message": "Hatırlatılacak mesajın kendisi",
+        "cron": "0 10 * * *"
+      }
+      
+      Kullanıcı Metni: "${text}"
+    `;
+
+    try {
+      const response = await this.llmService.chat(prompt, "Reminder Parse Mode");
+      if (!response) throw new Error("LLM Error");
+
+      const jsonStr = response.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(jsonStr);
+
+      if (!parsed.message || !parsed.cron) {
+        throw new Error("Missing fields in JSON");
+      }
+
+      const { CronService } = await import("../utils/cron.service");
+      const cronService = CronService.getInstance();
+      
+      const task = cronService.addDynamicTask(
+        ctx.chat?.id || "",
+        parsed.message,
+        parsed.cron,
+        false
+      );
+
+      await ctx.reply(`✅ Hatırlatma kuruldu!\n\n**Mesaj:** ${task.message}\n**Zaman (Cron):** ${task.triggerTimeStr}`);
+      
+    } catch (e) {
+      console.error("Reminder parsing error:", e);
+      await ctx.reply("❌ Hatırlatma zamanını veya detayını tam anlayamadım, lütfen daha açık yazar mısınız (Örn: '5 dakika sonra Cenk Beye mesaj at' veya 'Yarın sabah 10 da toplantı var de').");
+    }
+  }
+
+  private async handleOrderStatusQuery(ctx: Context, text: string, isBoss: boolean) {
+    if (!isBoss) {
+      await ctx.reply("❌ Sipariş raporlarını sorgulama yetkisi sadece yöneticilere aittir.");
+      return;
+    }
+
+    await ctx.reply("📊 Sipariş durumunu veritabanından kontrol edip raporluyorum, lütfen bekleyin...");
+
+    // Siparişleri çek
+    const orders = this.orderService.getOrders();
+    if (!orders || orders.length === 0) {
+      await ctx.reply("Şu anda sistemde kayıtlı hiçbir sipariş bulunmuyor.");
+      return;
+    }
+
+    // LLM'e veritabanındaki veriyi verip, kullanıcının ne sorduğunu ve doğru raporu üretmesini isteyelim (RAG yaklaşımı).
+    // Basit bir JSON formatında sipariş ve durumları verelim.
+    const ordersData = orders.map((o: any) => ({
+      Musteri: o.customerName,
+      Teslim_Tarihi: o.deliveryDate,
+      Durum: o.items.map((i: any) => ({
+        Urun: i.product,
+        Miktar: i.quantity,
+        Departman: i.department,
+        Isi_Yapan: i.assignedWorker || "Atanmadı",
+        Kumas_Geldimi: i.fabricDetails ? (i.fabricDetails.arrived ? "Geldi" : "Bekleniyor") : "N/A"
+      }))
+    }));
+
+    const prompt = `
+      Yönetici aşağıdaki soruyu sordu: "${text}"
+      
+      Şu an Veritabanında (Sistemde) kayıtlı olan tüm güncel sipariş bilgileri (JSON) şunlar:
+      ${JSON.stringify(ordersData, null, 2)}
+      
+      Yöneticinin bu sorusuna yukarıdaki verilere TıpaTıp ve eksiksiz uyarak, güzel, net ve profesyonel bir şirket asistanı (Ayça) gibi Rapor hazırla.
+      Eğer sorulan sipariş veya müşteri verilerde yoksa "Böyle bir sipariş kayıtlarımda bulunamadı" de.
+      Yorum veya gereksiz masal katma, sadece elindeki veriye sadık kal.
+    `;
+
+    try {
+      const response = await this.llmService.chat(prompt);
+      await ctx.reply(response || "❌ Durum raporu oluşturulamadı.");
+    } catch (e) {
+      console.error("Order Status Report Error:", e);
+      await ctx.reply("❌ Veritabanı okunurken bir hata oluştu.");
     }
   }
 }

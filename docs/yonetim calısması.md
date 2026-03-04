@@ -8,16 +8,17 @@
   o Metal Üretimi: Valeri
   o Dikişhane: Almira
   o Döşemehane: Hasan, Zhagir, Aleksi, Yura
-  o Boya/Cila: (Genel Süreç)
+  o Boyahane (Boya/Cila): Zhanibek
   o Kalite Kontrol: Marina
   o Paketleme: Nikita
   o Sevkiyat: Bekir
+  o Satış: Aizhan
 
 2. İş Akış Diyagramı (Siparişten Teslimata)
 1. Giriş: Sandaluci Mağaza'dan gelen detaylı sipariş formu (Müşteri bilgileri, Görsel, Kumaş/Boya kodu, Teslim tarihi).
-1. Planlama (Marina):
+1. Planlama ve Tüm Dış Satın Almalar (Marina):
    o Depo kontrol (Ham karkas takibi).
-   o Satın alma (Kumaş, boya, montaj malzemeleri: tutkal, vida vb.).
+   o Satın alma (Kumaş, sünger, boya, hırdavat, tutkal, vida vb. tüm dış tedarik sadece Marina'nın sorumluluğundadır).
 1. Üretim Safhası:
    o Karkas & Metal işleme Boyahane Dikişhane & Döşemehane birleşimi.
 1. Çıkış: Kalite Kontrol (Marina) Paketleme (Nikita) Sevkiyat (Bekir).
@@ -52,7 +53,9 @@ SANDALUCI ÜRETİM VE YÖNETİM YAPI DİYAGRAMI
    Döşemehane
    Hasan, Zhagir, Aleksi, Yura
    Boyahane
-   (Genel Üretim Hattı)
+   Zhanibek
+   Satış
+   Aizhan
    Kalite Kontrol
    Marina
    Paketleme
@@ -69,17 +72,17 @@ A. SİPARİŞ GİRİŞİ (Sandaluci Mağaza)
 - Resimli Sipariş Dökümü
 - Kumaş ve Boya Kodları
 - Termin (Teslim) Tarihi
-  B. PLANLAMA VE TEDARİK (Yönetici: Marina)
+  B. PLANLAMA VE TÜM DIŞ SATIN ALMALAR (Yönetici: Marina)
 
 1. Stok Kontrol: Depodaki ham karkasların kontrolü.
-2. Eksik Tamamlama: Eksik karkasların sipariş edilmesi.
-3. Malzeme Tedariği: \* Kumaş siparişleri (Hazır stok veya firma siparişi).
-   o Boya malzemeleri alımı.
-   o Montaj malzemeleri (Tutkal, vida vb.) alımı.
+2. Tüm Dış Satın Almalar:
+   o Kumaş siparişleri dahil fabrikaya girecek tüm malzemelerin tedariği Marina tarafından yapılır.
+   o Boya malzemeleri, hırdavat ve sünger alımı.
+   o Montaj malzemeleri (Tutkal, vida vb.) alımı sadece Marina tarafından onaylanır.
    C. ÜRETİM SAFHALARI
-4. Hazırlık: Karkas ve Metal bölümlerinde iskeletin oluşturulması.
-5. Yüzey İşlem: Boyahanede renk uygulamaları.
-6. Montaj & Döşeme: Dikişhaneden gelen kumaşların döşeme ekibi (Hasan, Zhagir, Aleksi, Yura) tarafından montajı.
+3. Hazırlık: Karkas ve Metal bölümlerinde iskeletin oluşturulması.
+4. Yüzey İşlem: Boyahanede renk uygulamaları.
+5. Montaj & Döşeme: Dikişhaneden gelen kumaşların döşeme ekibi (Hasan, Zhagir, Aleksi, Yura) tarafından montajı.
    D. ÇIKIŞ VE LOJİSTİK
 
 - Final Kontrol: Marina tarafından kalite onayı.
@@ -103,7 +106,7 @@ Harika, Sandaluci için hem bu yapıyı kurumsal bir .docx dökümanı haline ge
 
 SANDALUCI ÜRETİM VE YÖNETİM ORGANİZASYONU
 I. YÖNETİM VE İNSAN KAYNAKLARI ŞEMASI
-Genel Yönetici: Marina (Operasyon, Tedarik ve Kalite Kontrol Sorumlusu)
+Genel Yönetici: Marina (Operasyon, Tüm Dış Satın Almalar ve Kalite Kontrol Sorumlusu)
 Bölüm
 Sorumlu Personel
 Karkas Üretimi
@@ -114,6 +117,10 @@ Dikişhane
 Almira
 Döşemehane
 Hasan, Zhagir, Aleksi, Yura
+Boyahane
+Zhanibek
+Satış
+Aizhan
 Paketleme
 Nikita
 Sevkiyat
@@ -121,10 +128,10 @@ Bekir
 II. OPERASYONEL İŞ AKIŞI (Siparişten Teslimata)
 
 1. Sipariş Girişi: Sandaluci Mağaza'dan gelen form (Müşteri Adı, Tel, Görsel, Kumaş/Boya Kodu, Teslim Tarihi).
-2. Envanter & Satın Alma (Marina):
+2. Envanter & Tüm Dış Satın Almalar (Marina):
    o Ham karkas kontrolü (Eksikse sipariş).
-   o Kumaş siparişi (Hazır stok kontrolü veya tedarikçi).
-   o Boya ve montaj malzemeleri (Tutkal, vida vb.) alımı.
+   o Tüm Kumaş siparişleri ve hammadde tedariği (Hazır stok kontrolü veya dış tedarikçi).
+   o Sünger, boya ve montaj malzemeleri (Tutkal, vida vb.) alımlarının tek sorumlusu Marina'dır.
 3. Üretim Safhası: Karkas/Metal $\rightarrow$ Boyahane $\rightarrow$ Dikiş/Döşeme.
 4. Final: Kalite Kontrol (Marina) $\rightarrow$ Paketleme (Nikita) $\rightarrow$ Sevkiyat (Bekir).
 
@@ -155,7 +162,7 @@ Bu yapıyı daha da ileriye taşımak istersen şunları yapabilirim:
 
 SANDALUCI ÜRETİM VE YÖNETİM ORGANİZASYONU (GÜNCEL)
 I. YÖNETİM VE BÖLÜM SORUMLULARI ŞEMASI
-Genel Yönetici: Marina (Operasyon, Tedarik ve Kalite Kontrol Sorumlusu)
+Genel Yönetici: Marina (Operasyon, Tüm Dış Satın Almalar ve Kalite Kontrol Sorumlusu)
 Bölüm
 Sorumlu Personel
 Karkas Üretimi
@@ -169,7 +176,9 @@ Almira
 Döşemehane
 Hasan, Zhagir, Aleksi, Yura
 Boyahane
-(Genel Üretim Hattı)
+Zhanibek
+Satış
+Aizhan
 Kalite Kontrol
 Marina
 Paketleme
@@ -182,10 +191,10 @@ II. OPERASYONEL İŞ AKIŞI VE DİYAGRAM
 
 - Mağazadan gelen detaylı form: Müşteri adı, telefon, resimli sipariş dökümü, kumaş ve boya bilgileri, teslim tarihi.
 
-2. PLANLAMA VE SATIN ALMA (Marina):
+2. PLANLAMA VE TÜM DIŞ SATIN ALMALAR (Marina):
 
 - Depo Kontrol: Ham karkasların kontrolü (Eksikse sipariş).
-- Malzeme Tedariği: Kumaş siparişleri, boya malzemeleri ve montaj ekipmanları (Tutkal, vida vb.) alımı.
+- Malzeme Tedariği: Kumaş dahil Fabrika'nin tüm dış satın almalarında TEK yetkilidir. Boya malzemeleri, sünger ve montaj ekipmanları (Tutkal, vida vb.) alımı Marina'dan geçer.
 
 3. ÜRETİM VE DEKORASYON SÜRECİ:
 

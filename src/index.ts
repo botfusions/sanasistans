@@ -91,7 +91,7 @@ bot.on("callback_query:data", async (ctx) => {
         const itemInfo = orderService.getOrderItemById(itemId);
         await ctx.answerCallbackQuery(`✅ İş ${workerName} personeline atandı.`);
         await ctx.editMessageCaption({
-          caption: `✅ *Döşeme İşçisi Seçildi:* ${workerName}\nSipariş: ${itemInfo?.order.customerName}\nÜrün: ${itemInfo?.item.product}`,
+          caption: `✅ *${itemInfo?.item.department} İşçisi Seçildi:* ${workerName}\nSipariş: ${itemInfo?.order.customerName}\nÜrün: ${itemInfo?.item.product}`,
           parse_mode: "Markdown"
         });
         
@@ -125,7 +125,7 @@ bot.on("callback_query:data", async (ctx) => {
 
 // Cron Servisi (Eğer chatId verilmişse başlat)
 if (chatId) {
-  const cronService = new CronService(bot, chatId);
+  const cronService = CronService.getInstance(bot, chatId);
   cronService.init();
   console.log("📅 Cron Servisi Aktif Edildi.");
 
@@ -135,7 +135,14 @@ if (chatId) {
     async () => {
       try {
         await gmailService.processUnreadMessages(5, async (msg) => {
-          logger.info(`📧 Yeni e-posta işleniyor: ${msg.subject} (UID: ${msg.uid})`);
+          // Gereksiz sistem/bildirim maillerini filtrele
+          const skipDomains = ["groq.co", "supabase.com", "github.com", "google.com", "newsletter"];
+          if (skipDomains.some(domain => msg.from.toLowerCase().includes(domain))) {
+            logger.info(`🧹 Sistem maili atlanıyor: ${msg.subject} (${msg.from})`);
+            return;
+          }
+
+          logger.info(`📩 Yeni e-posta işleniyor: ${msg.subject} (UID: ${msg.uid})`);
           // E-posta bildirimi
           const emailSummary = `📧 *Yeni E-posta* \n\n*Gönderen:* ${msg.from}\n*Konu:* ${msg.subject}`;
           try {
@@ -250,27 +257,29 @@ if (chatId) {
               for (const targetId of targetIds) {
                 if (!targetId) continue;
 
-                // 1. DÖŞEME ÖZEL: Marina'ya işçi seçme butonları
-                if (currentDept === "Döşeme") {
+                // 1. DÖŞEME / DİKİŞHANE ÖZEL: Marina'ya işçi seçme butonları
+                if (currentDept === "Döşeme" || currentDept === "Dikişhane") {
                   for (const item of deptItems) {
-                    const keyboard = new InlineKeyboard()
-                      .text("Aydın", `assign_worker:${item.id}:Aydın`)
-                      .text("Uğur", `assign_worker:${item.id}:Uğur`)
-                      .row()
-                      .text("Duran", `assign_worker:${item.id}:Duran`)
-                      .text("Musa", `assign_worker:${item.id}:Musa`);
+                    const deptStaff = staffService.getStaffByDepartment(currentDept);
+                    const keyboard = new InlineKeyboard();
+                    
+                    // Personelleri klavyeye ekle (Her satırda 2 kişi)
+                    deptStaff.forEach((staff, index) => {
+                      keyboard.text(staff.name, `assign_worker:${item.id}:${staff.name}`);
+                      if ((index + 1) % 2 === 0) keyboard.row();
+                    });
 
                     await bot.api.sendPhoto(marinaId, productImages[0]?.media || new InputFile(pdfViewBuffer), {
-                      caption: `🧵 *Döşeme Görevlendirme*\n\nMüşteri: ${order.customerName}\nÜrün: ${item.product}\nMiktar: ${item.quantity}\n\n*İşi kime verelim?*`,
+                      caption: `🧶 *${currentDept} Görevlendirme*\n\nMüşteri: ${order.customerName}\nÜrün: ${item.product}\nMiktar: ${item.quantity}\n\n*İşi kime verelim?*`,
                       parse_mode: "Markdown",
                       reply_markup: keyboard
                     });
                   }
-                  continue; // Döşeme için toplu PDF yerine tek tek butonlu gidiyoruz
+                  continue; // Döşeme ve Dikişhane için toplu PDF yerine tek tek butonlu gidiyoruz
                 }
 
-                // 2. KUMAŞ / DİKİŞHANE (Almira): Kumaş onay butonları
-                if (currentDept === "Dikişhane" || currentDept === "Kumaş") {
+                // 2. KUMAŞ (Almira): Kumaş onay butonları
+                if (currentDept === "Kumaş") {
                   for (const item of deptItems) {
                     // Toplam kumaş hesabı
                     const totalFabric = item.fabricDetails?.amount ? (item.fabricDetails.amount * item.quantity).toFixed(1) : "?";
