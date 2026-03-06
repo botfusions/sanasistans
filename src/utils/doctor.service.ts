@@ -159,9 +159,40 @@ export class DoctorService {
     }
   }
 
+  public async checkNetwork(): Promise<DiagnosticResult> {
+    const targets = [
+      { host: "qdrant", port: 6333 },
+      { host: "172.17.0.1", port: 6333 },
+      { host: "5.182.33.26", port: 6333 },
+      { host: "5.182.33.26", port: 443 },
+      { host: "localhost", port: 6333 }
+    ];
+    
+    let report = "Ağ Tarama Sonuçları:\n";
+    for (const target of targets) {
+      const start = Date.now();
+      try {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), 2000);
+        await fetch(`http://${target.host}:${target.port}/healthz`, { signal: controller.signal });
+        clearTimeout(id);
+        report += `✅ ${target.host}:${target.port} -> ERİŞİLEBİLİR (${Date.now() - start}ms)\n`;
+      } catch (e: any) {
+        report += `❌ ${target.host}:${target.port} -> HATA: ${e.message}\n`;
+      }
+    }
+    
+    return {
+      service: "Network Scanner",
+      status: "WARNING",
+      message: report
+    };
+  }
+
   public async runFullDiagnostics(): Promise<DiagnosticResult[]> {
     return [
       await this.checkQdrant(),
+      await this.checkNetwork(),
       await this.checkSupabase(),
       await this.checkLLM(),
       await this.checkGmail(),
