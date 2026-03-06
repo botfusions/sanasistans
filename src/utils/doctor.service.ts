@@ -36,22 +36,28 @@ export class DoctorService {
   }
 
   public async checkQdrant(): Promise<DiagnosticResult> {
+    const url = process.env.QDRANT_URL || "http://localhost:6333";
     try {
       await this.qdrantClient.getCollections();
       return {
         service: "Qdrant",
         status: "OK",
-        message: "Bağlantı başarılı."
+        message: `Bağlantı başarılı. (URL: ${url})`
       };
     } catch (error: any) {
       let remedy = "QDRANT_URL ve QDRANT_API_KEY değişkenlerini kontrol edin.";
-      if (error.message.includes("fetch failed")) {
-        remedy = "Ağ Bağlantı Hatası! Qdrant VPS'de ise localhost:6333 deneyin.";
+      const errorMsg = error.message || "Bilinmeyen hata";
+      
+      if (errorMsg.includes("fetch failed")) {
+        remedy = "Ağ Bağlantı Hatası! Domain yerine IP (http://5.182.33.26:6333) veya Coolify servis adını (http://qdrant:6333) deneyin.";
+      } else if (errorMsg.includes("cert") || errorMsg.includes("SSL")) {
+        remedy = "SSL/Sertifika Hatası! NODE_TLS_REJECT_UNAUTHORIZED=0 olduğundan emin olun veya HTTP üzerinden bağlanmayı deneyin.";
       }
+      
       return {
         service: "Qdrant",
         status: "ERROR",
-        message: `Hata: ${error.message}`,
+        message: `Hata: ${errorMsg} (URL: ${url})`,
         remedy
       };
     }
