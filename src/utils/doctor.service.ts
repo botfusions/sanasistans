@@ -162,7 +162,7 @@ export class DoctorService {
   public async checkNetwork(): Promise<DiagnosticResult> {
     const targets = [
       { host: "qdrant", port: 6333 },
-      { host: "172.17.0.1", port: 6333 },
+      { host: "qdrant.turklawai.com", port: 443 },
       { host: "5.182.33.26", port: 6333 },
       { host: "5.182.33.26", port: 443 },
       { host: "localhost", port: 6333 }
