@@ -46,8 +46,10 @@ const messageHandler = new MessageHandler();
 const commandHandler = new CommandHandler();
 const doctorService = new DoctorService();
 
-const marinaId = (allowlist[0] && allowlist[0] !== "") ? allowlist[0] : (chatId || "");
-console.log(`👤 Onay Yetkilisi (Marina): ${marinaId}`);
+const supervisorId = (allowlist[0] && allowlist[0] !== "") ? allowlist[0] : (chatId || "");
+const marinaId = supervisorId; // Test aşamasında her iki rol de Patron/Süpervizör ID'sinde
+console.log(`👤 Sistem Yöneticisi (Patron): ${supervisorId}`);
+console.log(`👤 Sipariş Onay Yetkilisi (Geçici): ${marinaId}`);
 
 // Güvenlik & Rol Yönetimi Katmanı
 bot.use(async (ctx, next) => {
@@ -179,6 +181,17 @@ bot.on("callback_query:data", async (ctx) => {
       await ctx.editMessageText(message, { parse_mode: "Markdown", reply_markup: keyboard });
       await ctx.answerCallbackQuery(t("notification_status_updated", lang, { status: newStatus }));
 
+      // Marina'ya kritik durum değişikliği bilgisi gönder
+      if (marinaId && (newStatus === "hazir" || newStatus === "sevk_edildi")) {
+        const itemInfo = orderService.getOrderItemById(id);
+        if (itemInfo) {
+          const { order, item } = itemInfo;
+          const statusTxt = newStatus === "hazir" ? "HAZIR" : "SEVK EDİLDİ";
+          const alertMsg = `📢 *Durum Güncellemesi*\n\n👤 *Müşteri:* ${order.customerName}\n📦 *Ürün:* ${item.product}\n📍 *Yeni Durum:* **${statusTxt}**`;
+          await bot.api.sendMessage(marinaId, alertMsg, { parse_mode: "Markdown" });
+        }
+      }
+
     } else if (action === "production_done") {
       // Personel "Evet, bitti" dedi → statüyü güncelle + boya kontrolü
       const itemData = orderService.getOrderItemById(itemId);
@@ -193,6 +206,12 @@ bot.on("callback_query:data", async (ctx) => {
       // Statüyü hazır yap
       await orderService.updateItemStatus(item.id, "hazir");
       await ctx.editMessageText(t("followup_noted_done", workerLang as any), { parse_mode: "Markdown" });
+
+      // Marina'ya Bilgi: "X siparişinin Y ürünü bitti"
+      if (marinaId) {
+        const completionMsg = `✅ *Üretim Tamamlandı*\n\n👤 *Müşteri:* ${order.customerName}\n📦 *Ürün:* ${item.product}\n⚙️ *Bölüm:* ${item.department}\n👷‍♂️ *Usta:* ${item.assignedWorker || "Belirtilmedi"}`;
+        await bot.api.sendMessage(marinaId, completionMsg, { parse_mode: "Markdown" });
+      }
 
       // Boya kontrolü: siparişte boya kalemi var mı?
       if (orderService.orderNeedsPaint(order.id)) {

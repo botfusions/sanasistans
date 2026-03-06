@@ -5,6 +5,7 @@ import { CalendarService } from "./calendar.service";
 import { StaffService } from "./staff.service";
 import { OrderService } from "./order.service";
 import { KenanService } from "./kenan.service";
+import { ProactiveService } from "./proactive.service";
 import { t } from "./i18n";
 import fs from "fs";
 import path from "path";
@@ -26,6 +27,7 @@ export class CronService {
   private staffService: StaffService;
   private orderService: OrderService;
   private kenanService: KenanService;
+  private proactiveService: ProactiveService;
   private bot: Bot;
   private targetChatId: string | number;
   
@@ -40,6 +42,7 @@ export class CronService {
     this.staffService = StaffService.getInstance();
     this.orderService = new OrderService();
     this.kenanService = new KenanService();
+    this.proactiveService = new ProactiveService(bot, Number(chatId));
     
     // Klasör yoksa oluştur
     const dir = path.dirname(this.tasksFile);
@@ -101,6 +104,12 @@ export class CronService {
     // ÜRETİM TAKİP: İş emri dağıtımından 20 gün sonra bitti mi sorgusu (Her gün 10:30)
     cron.schedule("30 10 * * 1-6", () => {
       this.checkProductionStatus();
+    }, { timezone: "Asia/Almaty" });
+
+    // --- PROAKTİF KONTROL (HEARTBEAT) ---
+    // Kazakistan saati ile sabah 06:00 - 20:00 arası her saat başı çalışır.
+    cron.schedule("0 6-20 * * *", () => {
+      this.proactiveService.runHeartbeat();
     }, { timezone: "Asia/Almaty" });
   }
 
