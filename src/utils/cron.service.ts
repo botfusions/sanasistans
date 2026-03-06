@@ -1,10 +1,11 @@
 import cron from "node-cron";
-import { Bot, Context } from "grammy";
+import { Bot, Context, InlineKeyboard } from "grammy";
 import { ProductionService } from "./production.service";
 import { CalendarService } from "./calendar.service";
 import { StaffService } from "./staff.service";
 import { OrderService } from "./order.service";
 import { KenanService } from "./kenan.service";
+import { t } from "./i18n";
 import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
@@ -36,7 +37,7 @@ export class CronService {
     this.targetChatId = chatId;
     this.productionService = new ProductionService();
     this.calendarService = new CalendarService();
-    this.staffService = new StaffService();
+    this.staffService = StaffService.getInstance();
     this.orderService = new OrderService();
     this.kenanService = new KenanService();
     
@@ -95,6 +96,11 @@ export class CronService {
     // KUMAŞ TAKİP: 24 Saati geçen kumaş onaylarını kontrol et (Her 4 saatte bir)
     cron.schedule("0 */4 * * *", () => {
       this.checkFabricStatus();
+    }, { timezone: "Asia/Almaty" });
+
+    // ÜRETİM TAKİP: İş emri dağıtımından 20 gün sonra bitti mi sorgusu (Her gün 10:30)
+    cron.schedule("30 10 * * 1-6", () => {
+      this.checkProductionStatus();
     }, { timezone: "Asia/Almaty" });
   }
 
@@ -263,7 +269,7 @@ export class CronService {
     for (const order of orders) {
       const fabricPendingItems = order.items.filter(item => 
         (item.department === "Dikişhane" || item.department === "Kumaş") && 
-        item.status === "pending" &&
+        item.status === "bekliyor" &&
         new Date(item.updatedAt || item.createdAt).getTime() < twentyFourHoursAgo.getTime()
       );
       for (const item of fabricPendingItems) {
@@ -286,6 +292,84 @@ export class CronService {
     await this.checkPendingMaterials();
     await this.checkFabricStatus();
     await this.sendStaffControlMessage("morning");
+  }
+
+  /**
+   * Üretim Takip: İş emrinden 20 gün sonra, işi alan kişiye "Bitti mi?" butonları gönderir.
+   * Marina Hanım'ın özetini gönderir.
+   */
+  async checkProductionStatus() {
+    try {
+      const itemsToCheck = this.orderService.getItemsNeedingFollowUp(20);
+      if (itemsToCheck.length === 0) return;
+
+      console.log(`🔍 Üretim takip: ${itemsToCheck.length} kalem kontrol ediliyor...`);
+      const summaryLines: string[] = [];
+
+      for (const { order, item } of itemsToCheck) {
+        // İş emrini alan kişiyi bul
+        const workerName = item.assignedWorker;
+        if (!workerName) continue;
+
+        const worker = this.staffService.getStaffByName(workerName);
+        if (!worker || !worker.telegramId) {
+          console.warn(`⚠️ Personel bulunamadı: ${workerName}`);
+          continue;
+        }
+
+        const workerLang = worker.language || "ru";
+
+        // Son hatırlatma kontrolü (3 gün içinde tekrar sorma)
+        if (item.lastReminderAt) {
+          const lastReminder = new Date(item.lastReminderAt);
+          const daysSinceLast = Math.floor((Date.now() - lastReminder.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSinceLast < 3) continue;
+        }
+
+        // İşçiye soru gönder
+        const questionMsg = t("followup_question", workerLang as any, {
+          customer: order.customerName,
+          product: item.product,
+          quantity: String(item.quantity)
+        });
+
+        const keyboard = new InlineKeyboard()
+          .text(t("btn_yes_done", workerLang as any), `production_done:${item.id}`)
+          .text(t("btn_no_ongoing", workerLang as any), `production_ongoing:${item.id}`);
+
+        await this.bot.api.sendMessage(worker.telegramId, questionMsg, {
+          parse_mode: "Markdown",
+          reply_markup: keyboard
+        });
+
+        // lastReminderAt güncelle
+        item.lastReminderAt = new Date().toISOString();
+        item.updatedAt = new Date().toISOString();
+
+        summaryLines.push(`• ${order.customerName} - ${item.product} → ${workerName} soruldu`);
+      }
+
+      // Siparişleri kaydet (lastReminderAt güncellendi)
+      this.orderService.getOrders(); // trigger save indirectly
+
+      // Marina'ya özet gönder
+      if (summaryLines.length > 0) {
+        const marina = this.staffService.getMarina();
+        if (marina && marina.telegramId) {
+          const marinaLang = marina.language || "ru";
+          const summaryText = t("followup_summary_marina", marinaLang as any, {
+            summary: summaryLines.join("\n")
+          });
+          await this.bot.api.sendMessage(marina.telegramId, summaryText, {
+            parse_mode: "Markdown"
+          });
+        }
+      }
+
+      console.log(`✅ Üretim takip: ${summaryLines.length} personele soru gönderildi.`);
+    } catch (error) {
+      console.error("❌ Üretim takip hatası:", error);
+    }
   }
 }
 

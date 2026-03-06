@@ -2,20 +2,28 @@ import { Context } from "grammy";
 import { ProductionService } from "../utils/production.service";
 import { CalendarService } from "../utils/calendar.service";
 import { StaffService } from "../utils/staff.service";
+import { OrderService } from "../utils/order.service";
+import { t, getUserLanguage, Language } from "../utils/i18n";
 
 export class CommandHandler {
   private productionService: ProductionService;
   private calendarService: CalendarService;
   private staffService: StaffService;
+  private orderService: OrderService;
 
   constructor() {
     this.productionService = new ProductionService();
     this.calendarService = new CalendarService();
-    this.staffService = new StaffService();
+    this.staffService = StaffService.getInstance();
+    this.orderService = new OrderService();
   }
 
   private isBoss(ctx: Context): boolean {
     return (ctx as any).role === "SuperAdmin" || (ctx as any).role === "boss";
+  }
+
+  private getLang(ctx: Context): Language {
+    return getUserLanguage((ctx as any).role || "guest");
   }
 
   public async handleStart(ctx: Context) {
@@ -24,23 +32,21 @@ export class CommandHandler {
       ? this.staffService.getStaffByTelegramId(userId)
       : null;
     const isBoss = this.isBoss(ctx);
+    const lang = staffMember?.language || (isBoss ? "tr" : "ru");
 
     if (isBoss) {
-      await ctx.reply(
-        `Hoş geldiniz Barış Bey! 👋\n\nSandaluci üretim süreçleri ve ekip yönetimi için hazırım.\n\nKullanabileceğiniz Yönetici Komutları:\n/ajanda - Günlük planınız\n/personel - Ekip listesi\n/durum - Üretim durumu\n/kayit - Yeni personel ekle\n/sil - Personel sil\n/dev - Geliştirici Modu (Teknik Analiz)`,
-        { parse_mode: "Markdown" },
-      );
+      await ctx.reply(t("welcome_boss", lang as Language), { parse_mode: "Markdown" });
       return;
     }
 
     if (staffMember) {
       await ctx.reply(
-        `Merhaba ${staffMember.name}! Ben Ayça. 👋\n\n*${staffMember.department}* bölümündeki süreçlerde sana destek olmak için buradayım.\n\nKullanabileceğin komutlar:\n/durum - Üretim durumu\n/start - Yardım menüsü`,
+        t("welcome_staff", lang as Language, { name: staffMember.name, department: staffMember.department }),
         { parse_mode: "Markdown" },
       );
     } else {
       await ctx.reply(
-        `Merhaba! Ben Ayça, Sandaluci Yönetici Asistanıyım. 🙋‍♀️\n\nŞu an sadece kayıtlı personele hizmet verebiliyorum. Lütfen Cenk Bey ile iletişime geçerek kaydınızı yaptırın.`,
+        t("welcome_guest", "ru"),
         { parse_mode: "Markdown" },
       );
     }
@@ -228,5 +234,61 @@ export class CommandHandler {
     
     const response = await llm.chat(query, technicalPrompt);
     await ctx.reply(response || "Üzgünüm, teknik analiz sırasında bir hata oluştu.", { parse_mode: "Markdown" });
+  }
+
+  public async handleTakip(ctx: Context) {
+    if (!this.isBoss(ctx)) {
+      await ctx.reply(t("tracking_boss_only", this.getLang(ctx)));
+      return;
+    }
+
+    const activeItems = this.orderService.getActiveTrackingItems();
+    if (activeItems.length === 0) {
+      await ctx.reply(t("tracking_empty", this.getLang(ctx)));
+      return;
+    }
+
+    const lang = this.getLang(ctx);
+    let message = t("tracking_title", lang) + "\n\n";
+    const { InlineKeyboard } = require("grammy");
+    const keyboard = new InlineKeyboard();
+    
+    for (const entry of activeItems) {
+      const { order, item } = entry;
+      const statusIcon = item.status === "uretimde" ? "⚙️" : 
+                         item.status === "boyada" ? "🎨" :
+                         item.status === "dikiste" ? "🧵" :
+                         item.status === "dosemede" ? "🪑" : "⏳";
+      const statusText = t(`status_${item.status}`, lang);
+      
+      message += `${statusIcon} *${order.customerName}* - ${item.product}\n`;
+      message += `   ┗ ${statusText}\n\n`;
+
+      if (item.status === "bekliyor") {
+        keyboard.text(t("btn_start_production", lang), `set_status:${item.id}:uretimde`);
+      } else if (item.status === "uretimde") {
+        keyboard.text(t("btn_send_to_paint", lang), `set_status:${item.id}:boyada`);
+        keyboard.text(t("btn_send_to_sewing", lang), `set_status:${item.id}:dikiste`);
+      } else if (item.status === "boyada") {
+        keyboard.text(t("btn_send_to_sewing", lang), `set_status:${item.id}:dikiste`);
+        keyboard.text(t("btn_send_to_upholstery", lang), `set_status:${item.id}:dosemede`);
+      } else if (item.status === "dikiste") {
+        keyboard.text(t("btn_send_to_upholstery", lang), `set_status:${item.id}:dosemede`);
+        keyboard.text(t("btn_ready", lang), `set_status:${item.id}:hazir`);
+      } else if (item.status === "dosemede") {
+        keyboard.text(t("btn_ready", lang), `set_status:${item.id}:hazir`);
+      }
+      keyboard.row();
+    }
+
+    message += t("tracking_actions_hint", lang);
+    
+    keyboard.text(t("btn_refresh", lang), "refresh_tracking_list").row()
+      .text(t("btn_archive", lang), "archive_completed_items");
+
+    await ctx.reply(message, { 
+      parse_mode: "Markdown",
+      reply_markup: keyboard
+    });
   }
 }

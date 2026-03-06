@@ -9,6 +9,7 @@
     "dev": "npx tsx watch src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "format": "npx prettier --write src/"
   },
   "dependencies": {

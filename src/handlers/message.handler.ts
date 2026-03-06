@@ -18,7 +18,7 @@ export class MessageHandler {
     this.productionService = new ProductionService();
     this.qdrantService = new QdrantService();
     this.llmService = new OpenRouterService();
-    this.staffService = new StaffService();
+    this.staffService = StaffService.getInstance();
     this.orderService = new OrderService();
     this.voiceService = new VoiceService();
   }
@@ -32,7 +32,8 @@ export class MessageHandler {
       originalText = ctx.message.text;
     } else if (ctx.message.voice) {
       await ctx.reply("🎙️ Sesli mesajınızı dinliyorum, lütfen bekleyin...");
-      const transcribedText = await this.voiceService.transcribeVoiceMessage(ctx, ctx.message.voice.file_id);
+      const voiceLang = (ctx as any).role === "boss" ? "tr" : "ru";
+      const transcribedText = await this.voiceService.transcribeVoiceMessage(ctx, ctx.message.voice.file_id, voiceLang);
       
       if (!transcribedText) {
         await ctx.reply("❌ Sesli mesajınızı çözümleyemedim veya OpenAI API anahtarı ayarlanmamış.");

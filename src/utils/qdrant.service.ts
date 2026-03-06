@@ -13,6 +13,7 @@ export class QdrantService {
     this.client = new QdrantClient({
       url: process.env.QDRANT_URL || "http://localhost:6333",
       apiKey: process.env.QDRANT_API_KEY,
+      checkCompatibility: false,
     });
     this.collectionName = process.env.QDRANT_COLLECTION || "sandaluci_memory";
   }
@@ -20,10 +21,27 @@ export class QdrantService {
   public async checkConnection(): Promise<boolean> {
     try {
       await this.client.getCollections();
-      logger.info("Qdrant connection successful");
+      logger.info("✅ Qdrant connection successful");
+      
+      // Temel koleksiyonları kontrol et/oluştur
+      const collections = [
+        this.collectionName,
+        process.env.QDRANT_IMAGE_COLLECTION || "sandaluci_visual_memory"
+      ];
+
+      for (const col of collections) {
+        try {
+          await this.client.getCollection(col);
+        } catch (e) {
+          logger.info(`🔨 Koleksiyon bulunamadı, oluşturuluyor: ${col}`);
+          await this.client.createCollection(col, {
+            vectors: { size: 1536, distance: "Cosine" }
+          });
+        }
+      }
       return true;
     } catch (error) {
-      logger.error({ error }, "Qdrant connection failed");
+      logger.error({ error }, "❌ Qdrant connection failed");
       return false;
     }
   }
@@ -36,7 +54,7 @@ export class QdrantService {
         with_payload: true,
       });
     } catch (error) {
-      logger.error({ error }, "Qdrant search error");
+      logger.error({ error }, "❌ Qdrant search error");
       return [];
     }
   }
@@ -47,7 +65,7 @@ export class QdrantService {
         points: [{ id, vector, payload }],
       });
     } catch (error) {
-      logger.error({ error }, "Qdrant upsert error");
+      logger.error({ error }, "❌ Qdrant upsert error");
     }
   }
 
@@ -64,18 +82,8 @@ export class QdrantService {
       tags: string[];
     }
   ) {
+    const collection = process.env.QDRANT_IMAGE_COLLECTION || "sandaluci_visual_memory";
     try {
-      const collection = process.env.QDRANT_IMAGE_COLLECTION || "sandaluci_visual_memory";
-      
-      // Ensure collection exists
-      try {
-        await this.client.getCollection(collection);
-      } catch (e) {
-        await this.client.createCollection(collection, {
-          vectors: { size: 1536, distance: "Cosine" }
-        });
-      }
-
       await this.client.upsert(collection, {
         points: [{
           id: productId,
@@ -88,7 +96,7 @@ export class QdrantService {
       });
       logger.info({ productId }, "✅ Görsel hafızaya kaydedildi.");
     } catch (error) {
-      logger.error({ error }, "Qdrant upsertImage error");
+      logger.error({ error, productId, collection }, "❌ Qdrant upsertImage error");
     }
   }
 }

@@ -9,6 +9,13 @@ import { XlsxUtils, ExcelRow } from "./xlsx-utils";
 import { ImageEmbeddingService } from "./image-embedding.service";
 import { QdrantService } from "./qdrant.service";
 import { SupabaseService } from "./supabase.service";
+import { pino } from "pino";
+
+const logger = pino({
+  transport: {
+    target: "pino-pretty",
+  },
+});
 
 export interface OrderItem {
   id: string; // OrderID_Index formatında
@@ -21,11 +28,12 @@ export interface OrderItem {
   rowIndex?: number;
   imageBuffer?: Buffer;
   imageExtension?: string;
-  status: "pending" | "fabric_waiting" | "fabric_issue" | "in_production" | "qc_ready" | "shipping" | "archived";
+  status: "bekliyor" | "uretimde" | "boyada" | "dikiste" | "dosemede" | "hazir" | "sevk_edildi" | "arsivlendi";
   assignedWorker?: string;
+  distributedAt?: string; // İş emri dağıtım tarihi (takip zamanlayıcı için)
   fabricDetails?: {
     name: string;
-    amount: number; // Birim ürün için gereken miktar (metre vb.)
+    amount: number;
     arrived: boolean;
     issueNote?: string;
   };
@@ -61,7 +69,7 @@ export class OrderService {
     this.archivePath = path.join(process.cwd(), "data", "siparis_arsivi.json");
     this.logPath = path.join(process.cwd(), "data", "verilen_siparisler.log");
     this.llmService = new OpenRouterService();
-    this.staffService = new StaffService();
+    this.staffService = StaffService.getInstance();
     this.imageEmbeddingService = new ImageEmbeddingService();
     this.qdrantService = new QdrantService();
     this.supabase = SupabaseService.getInstance();
@@ -96,7 +104,7 @@ export class OrderService {
             details: i.details,
             source: i.source,
             imageUrl: i.image_url,
-            status: i.status,
+            status: i.status || "bekliyor",
             assignedWorker: i.assigned_worker,
             fabricDetails: {
               name: i.fabric_name,
@@ -160,46 +168,58 @@ export class OrderService {
     rawExcelData?: ExcelRow[]
   ): Promise<OrderDetail | null> {
     const prompt = `
-      Sen bir Sandaluci Üretim Asistanısın (Ayça). Aşağıdaki ${isExcel ? "Excel verisinden (JSON formatında)" : "e-posta içeriğinden"} sipariş detaylarını çıkartmanı istiyorum.
+      Sen profesyonel bir Sandaluci Üretim Planlama Asistanısın. Görevin, gelen Excel verisini departmanlara göre hatasız parçalamaktır.
       
-      🚨 KRİTİK KURAL: Bir ürünün üretilmesi birden fazla departmanı ilgilendiriyorsa (Örn: Hem karkas üretilmeli, hem dikiş dikilmeli, hem döşeme yapılmalı), o ürünü her departman için AYRI BİRER KALEM olarak oluşturmalısın.
-      Sipariş dağıtımı şu akışa göre yapılmalı:
-      - Ahşap/İskelet kısmı -> Karkas Üretimi
-      - Metal kısımlar -> Metal Üretimi
-      - Kumaş/Deri kesim ve dikim -> Dikişhane
-      - Son birleştirme ve sünger/döşeme -> Döşemehane
-      - Cilalama/Boyama -> Mobilya Dekorasyon
+      EXCEL SÜTUNLARI VE ANLAMLARI:
+      - "ÜRÜN ADI" / "KOD": Ürün kimliği.
+      - "ADET": Ürün miktarı.
+      - "İSKELET DURUMU" / "İSKELET": Eğer "YAPILACAK", "İSKELET YAPILACAK" veya karkas gereksinimi varsa -> "Karkas Üretimi" departmanı.
+      - "DİKİŞ": Eğer "YAPILACAK" veya kumaş bilgisi varsa -> "Dikişhane" departmanı.
+      - "DÖŞEME": Eğer "YAPILACAK" varsa -> "Döşemehane" departmanı.
+      - "KUMAŞ/BİRİM" / "KUMAŞ KODU" / "KUMAŞ": Kumaş detayları. (Örn: "Dorian 12", "Kadife")
+      - "BOYA" / "CİLA" / "RENK": Boya ve cila detayları (Örn: "72 Koyu Ceviz").
+      
+      🚨 KRİTİK KURALLAR:
+      1. ÜRÜN PARÇALAMA: Bir satırda birden fazla departman (İskelet, Dikiş, Döşeme) işaretlenmişse, HER BİRİ İÇİN AYRI kalem oluştur.
+      2. DETAYLARIN KORUNMASI: "Kumaş", "Boya" ve "Teknik Not" bilgilerini, o ürünle ilgili TÜM parçalanmış kalemlerin (İskelet, Dikiş, Döşeme vb.) "details" metnine MUTLAKA EKLE. 
+         Örneğin: Dikişhane kalemi için details: "Kumaş: Dorian 12. Dikiş yapılacak."
+         Örneğin: Karkas üretimi için details: "Boya: 72 Ceviz. İskelet üretimi."
+      3. FABRIC VE PAINT ALANLARI: "fabricDetails" ve "paintDetails" nesnelerini her kalem için doldur. Kumaş yoksa boş bırakma, "Yok" yaz.
+      4. DEPARTMAN ATAMA: Sadece şu departmanları kullan: "Karkas Üretimi", "Metal Üretimi", "Mobilya Dekorasyon", "Dikişhane", "Döşemehane", "Boyahane".
+      5. MÜŞTERİ BİLGİSİ: "MÜŞTERİ ADI" ve varsa "ADRES" alanlarını birleştirerek "customerName" yap.
+      
+      🚨 DEPARTMAN ÖZEL KURALLARI:
+      - Dikişhane: Sadece kumaş kodu ve dikiş detaylarını ekle.
+      - Döşemehane: Sadece ürün adı ve döşeme notlarını ekle.
+      - Boyahane: Sadece boya rengi ve cila notlarını ekle.
+      
+      ÖRNEK:
+      Girdi: Ürün: 274 Sandalye, İskelet: YAPILACAK, Dikiş: YAPILACAK, Kumaş: Kadife Yeşil, Boya: 72 Ceviz
+      Çıktı (Items):
+      - Part 1: Product: "274 Sandalye", Dept: "Karkas Üretimi", Details: "Boya: 72 Ceviz. İskelet üretimi."
+      - Part 2: Product: "274 Sandalye", Dept: "Dikişhane", Details: "Kumaş: Kadife Yeşil. Dikiş yapılacak."
 
-      İçerik:
+      İÇERİK (Excel JSON):
       ${content}
       
-      Lütfen şu JSON formatında yanıt ver:
+      SADECE SAF JSON DÖNDÜR:
       {
-        "orderNumber": "Email içinden veya konu başlığından varsa al, yoksa 'OTOMATIK'",
-        "customerName": "Müşteri adı ve Şehir (Örn: Маржан, город Жетисай). İçerikte geçen lokasyon bilgisini mutlaka ekle.",
+        "orderNumber": "...",
+        "customerName": "...",
         "items": [
           {
-            "product": "Ürün adı/kodu",
-            "department": "Karkas Üretimi | Metal Üretimi | Mobilya Dekorasyon | Dikişhane | Döşemehane",
-            "quantity": 1,
-            "details": "Ölçü, boya kodu, işçilik detayları vb.",
-            "fabricDetails": {
-               "name": "Kumaş adı/kodu (Sadece Dikiş/Döşeme için)",
-               "amount": 1.5
-            },
-            "source": "Stock | Production | External",
-            "rowIndex": "Veri Excel'den geliyorsa, ilgili satırın '_rowNumber' değerini sayı olarak yaz."
+            "product": "...",
+            "department": "...",
+            "quantity": 0,
+            "details": "...",
+            "fabricDetails": {"name": "...", "amount": 0},
+            "paintDetails": {"name": "..."},
+            "source": "Production",
+            "rowIndex": 0
           }
         ],
-        "deliveryDate": "Varsa termin tarihi, yoksa 'Belirtilmedi'"
+        "deliveryDate": "..."
       }
-
-      Önemli Kurallar:
-      1. Kompleks bir ürünü (Örn: Döşemeli Sandalye) parçalarına böl: 1-Karkas, 2-Dikişhane, 3-Döşemehane şeklinde 3 ayrı item oluştur.
-      2. Müşteri adını ve Şehir/Lokasyon bilgisini tüm içerikten (imza, başlık, metin) dikkatle çıkart.
-      3. Rusça isimleri ve şehirleri (Kiril alfabesi) olduğu gibi koru.
-      4. 'source' alanını ürünün durumuna göre belirle.
-      5. JSON Dışında hiçbir açıklama ekleme. Sadece saf JSON döndür.
     `;
 
     try {
@@ -237,7 +257,7 @@ export class OrderService {
       order.items = order.items.map((item, index) => ({
         ...item,
         id: `${order.id}_${index}`,
-        status: "pending",
+        status: "bekliyor",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         fabricDetails: item.fabricDetails ? {
@@ -279,7 +299,11 @@ export class OrderService {
         });
       }
 
-      this.orders.push(order);
+      // Görsel hafıza arka planda çalışsın - sipariş akışını bloklamasın
+      this.saveToVisualMemory(order).catch(e => {
+        console.error("⚠️ Görsel hafıza kaydı atlandı (hata):", e);
+      });
+
       await this.persistOrder(order);
       await this.logOrder(order);
       return order;
@@ -353,7 +377,9 @@ export class OrderService {
    */
   static escapeMarkdown(text: string): string {
     if (!text) return "";
-    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, "\\$1");
+    // Telegram Markdown (v1) için sadece *, _, [, ` kaçırılmalıdır.
+    // -, ., ! gibi karakterleri kaçırmak ekranda gereksiz \ çıkarır.
+    return text.replace(/([*_\[`])/g, "\\$1");
   }
 
   /**
@@ -371,18 +397,20 @@ export class OrderService {
     table += `📅 *Termin:* ${delivery}\n`;
     table += `━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    table += `| Ürün | Adet | Departman | Kaynak |\n`;
-    table += `| :--- | :--- | :--- | :--- |\n`;
-
-    order.items.forEach((item) => {
+    order.items.forEach((item, index) => {
       const product = OrderService.escapeMarkdown(item.product);
+      const details = OrderService.escapeMarkdown(item.details || "Yok");
       const dept = OrderService.escapeMarkdown(item.department);
-      const sourceEmoji = item.source === "Stock" ? "📦" : item.source === "Production" ? "🏭" : "🛒";
-      table += `| ${product} | ${item.quantity} | ${dept} | ${sourceEmoji} |\n`;
+      const worker = item.assignedWorker ? OrderService.escapeMarkdown(item.assignedWorker) : "⌛ Atama Bekliyor";
+      
+      table += `${index + 1}. 📦 *Ürün:* ${product}\n`;
+      table += `   🛠 *Birim:* ${dept}\n`;
+      table += `   👤 *Görevli:* ${worker}\n`;
+      table += `   📝 *Detay:* ${details}\n`;
+      table += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
     });
 
-    table += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-    table += `✅ _Tüm birimlere iş emirleri iletildi._`;
+    table += `\n✅ _Tüm birimlere iş emirleri iletildi._`;
 
     return table;
   }
@@ -747,7 +775,8 @@ export class OrderService {
       const item = order.items.find((i) => i.id === itemId);
       if (item) {
         item.assignedWorker = workerName;
-        item.status = "in_production";
+        item.status = "uretimde";
+        item.distributedAt = new Date().toISOString();
         item.updatedAt = new Date().toISOString();
         order.updatedAt = new Date().toISOString();
         
@@ -769,7 +798,7 @@ export class OrderService {
       if (item && item.fabricDetails) {
         item.fabricDetails.arrived = arrived;
         if (note) item.fabricDetails.issueNote = note;
-        item.status = arrived ? "pending" : "fabric_issue";
+        item.status = arrived ? "bekliyor" : "bekliyor"; // Eksikse de bekliyor ama notu var
         item.updatedAt = new Date().toISOString();
         order.updatedAt = new Date().toISOString();
         
@@ -792,5 +821,81 @@ export class OrderService {
       if (item) return { order, item };
     }
     return null;
+  }
+
+  public getActiveTrackingItems(): { order: OrderDetail, item: OrderItem }[] {
+    const activeItems: { order: OrderDetail, item: OrderItem }[] = [];
+    this.orders.forEach(order => {
+      order.items.forEach(item => {
+        if (!["hazir", "sevk_edildi", "arsivlendi"].includes(item.status)) {
+          activeItems.push({ order, item });
+        }
+      });
+    });
+    return activeItems;
+  }
+
+  /**
+   * Takip gerektiren kalemleri döner.
+   * "uretimde" statüsünde ve distributedAt'ten beri belirli gün geçmiş olanlar.
+   * Ahşap/Metal/Dekorasyon → 20 gün, Dikişhane/Döşemehane → 15 gün
+   */
+  public getItemsNeedingFollowUp(daysAfter: number = 20): { order: OrderDetail, item: OrderItem }[] {
+    const deptTimelines: Record<string, number> = {
+      "ahşap": 20,
+      "metal üretimi": 20,
+      "mobilya dekorasyon": 20,
+      "karkas üretimi": 20,
+      "dikişhane": 15,
+      "döşemehane": 15,
+    };
+    const now = new Date();
+    const results: { order: OrderDetail, item: OrderItem }[] = [];
+
+    this.orders.forEach(order => {
+      order.items.forEach(item => {
+        if (
+          item.status === "uretimde" &&
+          item.distributedAt &&
+          item.assignedWorker
+        ) {
+          // Departmana göre takip süresini belirle
+          const deptKey = Object.keys(deptTimelines).find(d =>
+            item.department.toLowerCase().includes(d)
+          );
+          if (!deptKey) return;
+
+          const requiredDays = deptTimelines[deptKey];
+          const dist = new Date(item.distributedAt);
+          const daysPassed = Math.floor((now.getTime() - dist.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysPassed >= requiredDays) {
+            results.push({ order, item });
+          }
+        }
+      });
+    });
+    return results;
+  }
+
+  /**
+   * Siparişteki diğer kalemlerden birinin "Boyahane" departmanında olup olmadığını kontrol eder.
+   */
+  public orderNeedsPaint(orderId: string): boolean {
+    const order = this.orders.find(o => o.id === orderId);
+    if (!order) return false;
+    return order.items.some(item =>
+      item.department.toLowerCase().includes("boya") && item.status === "bekliyor"
+    );
+  }
+
+  /**
+   * Siparişin boya kalemlerini bulur.
+   */
+  public getPaintItemsForOrder(orderId: string): OrderItem[] {
+    const order = this.orders.find(o => o.id === orderId);
+    if (!order) return [];
+    return order.items.filter(item =>
+      item.department.toLowerCase().includes("boya") && item.status === "bekliyor"
+    );
   }
 }

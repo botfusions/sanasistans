@@ -53,13 +53,15 @@ export class OpenRouterService {
       ];
 
       const completion = await this.client.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free",
+        model: process.env.OPENROUTER_MODEL || "qwen/qwen3.5-35b-a3b",
         messages: messages,
+      }, {
+        timeout: 60000 // 60 saniye zaman aşımı
       });
 
       return completion.choices[0].message.content;
     } catch (error) {
-      console.error("❌ OpenRouter hatası detayı:", error);
+      console.error("❌ OpenRouter hatası detayı (Timeout veya API Hatası):", error);
       return null;
     }
   }

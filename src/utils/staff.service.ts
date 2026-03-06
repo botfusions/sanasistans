@@ -9,19 +9,28 @@ export interface Staff {
   department: string;
   role: string;
   phone?: string;
-  isMarina?: boolean; // New: Flag for Marina Hanım
+  language: "tr" | "ru";
+  isMarina?: boolean;
 }
 
 export class StaffService {
+  private static instance: StaffService;
   private supabase: SupabaseService;
   private staffFilePath: string;
   private staffList: Staff[] = [];
 
-  constructor() {
+  private constructor() {
     this.supabase = SupabaseService.getInstance();
     this.staffFilePath = path.resolve(process.cwd(), "data", "staff.json");
     this.ensureDataDirectory();
     this.loadStaffFromSupabase(); // Başlangıçta DB'den çek
+  }
+
+  public static getInstance(): StaffService {
+    if (!StaffService.instance) {
+      StaffService.instance = new StaffService();
+    }
+    return StaffService.instance;
   }
 
   private ensureDataDirectory() {
@@ -46,6 +55,7 @@ export class StaffService {
           department: s.department,
           role: s.role,
           phone: s.phone,
+          language: s.language || "ru",
           isMarina: s.is_marina
         }));
         this.saveToLocalFile(); // Yerelde yedekle
@@ -104,6 +114,7 @@ export class StaffService {
       name: "Test Personeli",
       department: "Test",
       role: "Personnel",
+      language: "ru"
     };
   }
 
@@ -126,7 +137,8 @@ export class StaffService {
       name,
       department,
       phone,
-      role: "Personnel"
+      role: "Personnel",
+      language: "ru" as const
     };
 
     try {

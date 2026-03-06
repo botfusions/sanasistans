@@ -11,7 +11,7 @@ dotenv.config();
 export class VoiceService {
   constructor() {}
 
-  public async transcribeVoiceMessage(ctx: Context, fileId: string): Promise<string | null> {
+  public async transcribeVoiceMessage(ctx: Context, fileId: string, lang: string = "ru"): Promise<string | null> {
     const groqKey = process.env.GROQ_API_KEY;
 
     if (!groqKey || groqKey.trim() === "") {
@@ -38,7 +38,7 @@ export class VoiceService {
       const formData = new FormData();
       formData.append("file", fs.createReadStream(tempFilePath));
       formData.append("model", "whisper-large-v3");
-      formData.append("language", "tr");
+      formData.append("language", lang);
       formData.append("response_format", "json");
 
       const groqResponse = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {

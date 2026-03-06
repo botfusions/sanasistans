@@ -1,11 +1,12 @@
 [
   {
-    "id": "5379d212-b1a1-4493-ac76-818984524807",
+    "id": "aa60acd6-aa75-485f-bd30-4d1e8a06eff2",
     "telegramId": 6030287709,
     "name": "Marina Hanım (Test)",
-    "department": "Yönetim",
+    "department": "Kalite Kontrol",
     "role": "Admin",
     "phone": null,
+    "language": "ru",
     "isMarina": true
   }
 ]

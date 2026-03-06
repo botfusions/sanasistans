@@ -50,7 +50,7 @@ Günün / Durumun Özelliği: ${context}
       ];
 
       const completion = await this.client.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free",
+        model: process.env.OPENROUTER_MODEL || "qwen/qwen3.5-35b-a3b",
         messages: messages,
       });
 
