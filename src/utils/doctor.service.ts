@@ -48,6 +48,8 @@ export class DoctorService {
       
       if (error.message.includes("certificate") || error.message.includes("SSL")) {
         remedy = "⚠️ SSL Sertifika Hatası tespit edildi! VPS üzerinde self-signed sertifika kullanıyorsanız, .env dosyasına NODE_TLS_REJECT_UNAUTHORIZED=0 eklemeyi veya Qdrant adresini HTTP üzerinden (port 6333) kullanmayı deneyin.";
+      } else if (error.message.includes("fetch failed") || error.message.includes("reach")) {
+        remedy = "🌐 Ağ Bağlantı Hatası! VPS üzerinden 'qdrant.turklawai.com' adresine ulaşılamıyor. 'curl https://qdrant.turklawai.com' komutuyla erişimi test edin. Eğer Qdrant aynı VPS'de ise, .env içindeki QDRANT_URL'i 'http://localhost:6333' yapmayı deneyin.";
       } else if (error.message.includes("Compatibility") || error.message.includes("version")) {
         remedy = "💡 Versiyon uyumsuzluğu! checkCompatibility: false ayarı yapıldı ancak sunucu yanıt vermiyor. Qdrant versiyonunuzun güncel olduğundan emin olun.";
       }
@@ -143,6 +145,9 @@ Eğer sorun VPS yapılandırmasıyla ilgiliyse Docker veya .env ipuçları ver.`
         pass: process.env.GMAIL_PASS || "",
       },
       logger: false,
+      tls: {
+        rejectUnauthorized: false
+      }
     });
 
     try {
@@ -178,9 +183,9 @@ Eğer sorun VPS yapılandırmasıyla ilgiliyse Docker veya .env ipuçları ver.`
     results.forEach(res => {
       const icon = res.status === "OK" ? "✅" : res.status === "WARNING" ? "⚠️" : "❌";
       report += `${icon} *${res.service}*: ${res.status}\n`;
-      report += `📝 _${res.message}_\n`;
+      report += `📝 _${res.message.replace(/_/g, "\\_")}_\n`;
       if (res.remedy) {
-        report += `💡 *Çözüm:* ${res.remedy}\n`;
+        report += `💡 *Çözüm:* ${res.remedy.replace(/_/g, "\\_")}\n`;
       }
       report += "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n";
     });
