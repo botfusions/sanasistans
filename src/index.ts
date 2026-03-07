@@ -1192,7 +1192,7 @@ if (chatId) {
 }
 
 // Health Check Sunucusu (Coolify için)
-const port = process.env.PORT || 3000; // Coolify varsayılanı 3000
+const port = Number(process.env.PORT) || 3000; // Coolify varsayılanı 3000
 const botEnabled = process.env.BOT_ENABLED !== "false";
 
 if (botEnabled) {
