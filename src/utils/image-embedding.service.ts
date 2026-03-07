@@ -62,16 +62,16 @@ export class ImageEmbeddingService {
       return this.simulateEmbedding(description);
     } catch (error) {
       logger.error({ error }, "Görsel vektörleştirme hatası.");
-      return new Array(768).fill(0); // Fallback to 768
+      return new Array(1024).fill(0); // Fallback to 1024
     }
   }
 
   private simulateEmbedding(text: string): number[] {
     // This is a placeholder for actual text embedding API call
     // In production, use openai.embeddings.create or similar
-    const vector = new Array(768).fill(0);
+    const vector = new Array(1024).fill(0);
     for (let i = 0; i < text.length; i++) {
-      vector[i % 768] += text.charCodeAt(i) / 1000;
+      vector[i % 1024] += text.charCodeAt(i) / 1000;
     }
     return vector.map((v) => Math.tanh(v)); // Normalize
   }
