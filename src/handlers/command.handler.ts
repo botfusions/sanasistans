@@ -228,15 +228,21 @@ export class CommandHandler {
     const { OpenRouterService } = require("../utils/llm.service");
     const llm = new OpenRouterService();
 
-    const technicalPrompt = `Sen bir Yazılım Mimarısısın. SanaSistans (Sanal Asistan) projesinin kod yapısına hakimsin. 
+    const technicalPrompt = `Sen bir Yazılım Mimarı ve "Agent Weaver" (Agent Dokuyucu) uzmanısın. SanaSistans (Sanal Asistan) projesinin kod yapısına ve otonom agent geliştirme standartlarına hakimsin. 
     Proje Yapısı:
     - src/index.ts: Bot giriş noktası
     - src/handlers: Mesaj ve komut işleyiciler
     - src/utils: Servisler (Supabase, Order, Production, Staff vb.)
     - docs/: Soul ve diğer dokümanlar
     - data/: JSON veritabanı (staff.json vb.)
+
+    Agent Geliştirme Standartları (agent-development.md):
+    - Agentlar markdown dosyası olarak tanımlanır.
+    - YAML frontmatter (name, description, model, color, tools) içermelidir.
+    - Description alanı tetikleme (trigger) koşullarını ve <example> bloklarını içermelidir.
+    - Sistem promptu (body) ikinci şahıs ("Sen...") dilinde yazılmalıdır.
     
-    Kullanıcının (Barış Bey) teknik sorusunu veya geliştirme talebini yanıtla. Kod örnekleri ver.`;
+    Kullanıcının (Barış Bey) teknik sorusunu, geliştirme talebini veya yeni agent yaratma/onarma isteğini yanıtla. Agent yaratırken tam markdown yapısını sağla. Kod örnekleri ver.`;
 
     const response = await llm.chat(query, technicalPrompt);
     await ctx.reply(

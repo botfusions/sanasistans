@@ -145,37 +145,64 @@ export class DoctorService {
   }
 
   public async checkNetwork(): Promise<DiagnosticResult> {
+    const LATENCY_WARNING_MS = 300; // Kazakistan VPS için 300ms eşiği
     const targets = [
       { host: "google.com", port: 443 }, // Internet check
       { host: "aejhzxvuegchakaknwts.supabase.co", port: 443 }, // Supabase check
     ];
 
     let report = "Ağ Tarama Sonuçları:\n";
+    let hasNetworkError = false;
+    let hasHighLatency = false;
+
     for (const target of targets) {
       const start = Date.now();
       try {
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         const protocol = target.port === 443 ? "https" : "http";
 
-        await fetch(`${protocol}://${target.host}:${target.port}/healthz`, {
+        await fetch(`${protocol}://${target.host}`, {
+          method: "HEAD",
           signal: controller.signal,
           // @ts-ignore
           agent:
             target.port === 443
               ? new (require("https").Agent)({ rejectUnauthorized: false })
               : undefined,
+        }).catch((fetchErr: any) => {
+          // Re-throw only real network errors; HTTP-level errors (4xx, 3xx) mean server is reachable
+          const isNetworkError =
+            fetchErr.name === "AbortError" ||
+            fetchErr.message?.includes("ENOTFOUND") ||
+            fetchErr.message?.includes("ECONNREFUSED") ||
+            fetchErr.message?.includes("ETIMEDOUT");
+          if (isNetworkError) throw fetchErr;
+          // Otherwise swallow — server answered even if with an error code
         });
-        clearTimeout(id);
-        report += `✅ ${target.host}:${target.port} -> ERİŞİLEBİLİR (${Date.now() - start}ms)\n`;
+
+        clearTimeout(timeoutId);
+        const elapsed = Date.now() - start;
+        if (elapsed > LATENCY_WARNING_MS) {
+          hasHighLatency = true;
+          report += `✅ ${target.host}:${target.port} -> ERİŞİLEBİLİR (${elapsed}ms) ⚠️ Yüksek gecikme\n`;
+        } else {
+          report += `✅ ${target.host}:${target.port} -> ERİŞİLEBİLİR (${elapsed}ms)\n`;
+        }
       } catch (e: any) {
-        report += `❌ ${target.host}:${target.port} -> HATA: ${e.message}\n`;
+        hasNetworkError = true;
+        const msg = e.name === "AbortError" ? "Timeout (5s)" : e.message;
+        report += `❌ ${target.host}:${target.port} -> HATA: ${msg}\n`;
       }
     }
 
+    let finalStatus: DiagnosticResult["status"] = "OK";
+    if (hasNetworkError) finalStatus = "WARNING";
+    // High latency alone doesn't change OK to WARNING — only real errors do
+
     return {
       service: "Network Scanner",
-      status: "WARNING",
+      status: finalStatus,
       message: report,
     };
   }
