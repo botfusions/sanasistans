@@ -20,6 +20,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Aşama 3: Personel & Verimlilik:** Parça başı (Piecework) takip sistemi ve "Marina" onay mekanizması ile üretim disiplini sağlandı.
 - **Aşama 4: Görsel Hafıza:** Supabase (pgvector) vektör veritabanı ile geçmiş ürün görsellerinden benzerlik araması yapabilen "Görsel Bellek" entegre edildi. Görseller VPS üzerindeki yerel depolama biriminde güvenle saklanır.
 - **Aşama 5: Sesli Komut & Telegram Voice:** Telegram üzerinden gelen sesli mesajları (Voice Message) OpenAI/Grok/Gemini altyapısı ile metne dönüştürüp analiz eden ve ilgili departmanlara not olarak ileten sesli asistan yeteneği kazandırıldı.
+- **Aşama 6: Telegram Excel İşleme (Mart 2026):** Telegram üzerinden gönderilen `.xlsx` ve `.xls` dosyalarını otomatik olarak indiren, `XlsxUtils` ile ayrıştıran ve `OrderService` üzerinden sipariş taslağına dönüştüren uçtan uca dosya işleme akışı entegre edildi.
 
 ### 3. Bot Stabilitesi & Çakışma Yönetimi (Mart 2026)
 
@@ -59,6 +60,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 
 - **Model:** OpenRouter üzerinden `google/gemini-2.0-flash-001` (Yüksek hızlı ve zeki JSON analizi).
 - **Veritabanı:** Supabase (SQL & pgvector).
+- **Excel Analizi:** `xlsx` ve `exceljs` kütüphaneleri ile derinlemesine dosya ve resim ayrıştırma.
 - **Arşivleme:** İşlenen sipariş formları `data/orders` altında, görseller ise `data/images` altında.
 - **Deployment:** Docker & Coolify (Port 3000 Healthcheck aktif).
 

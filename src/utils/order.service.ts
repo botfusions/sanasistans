@@ -1,13 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
 const PDFDocument = require("pdfkit");
-const { createCanvas, Image } = require("canvas");
+const { createCanvas } = require("canvas");
 const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 import { OpenRouterService } from "./llm.service";
 import { StaffService } from "./staff.service";
 import { ExcelRow } from "./xlsx-utils";
 import { ImageEmbeddingService } from "./image-embedding.service";
 import { SupabaseService } from "./supabase.service";
+import { t, Language } from "./i18n";
 import { pino } from "pino";
 
 const logger = pino();
@@ -159,6 +160,20 @@ export class OrderService {
     }
   }
 
+  // Departman ismini i18n üzerinden çevirir (varsayılan: ru)
+  public getDeptTranslation(dept: string, lang: Language = "ru"): string {
+    const mapping: Record<string, string> = {
+      "Karkas Üretimi": "dept_karkas",
+      "Metal Üretimi": "dept_metal",
+      "Mobilya Dekorasyon": "dept_mobilya",
+      "Dikişhane": "dept_sewing",
+      "Döşemehane": "dept_upholstery",
+      "Boyahane": "dept_paint",
+    };
+    const key = mapping[dept];
+    return key ? t(key, lang) : dept;
+  }
+
   /**
    * Email veya Excel içeriğini analiz eder.
    */
@@ -169,15 +184,21 @@ export class OrderService {
     rawExcelData?: ExcelRow[],
   ): Promise<OrderDetail | null> {
     const prompt = `
-      Sen profesyonel bir Sandaluci Üretim Planlama Asistanısın. Görevin, gelen Excel verisini departmanlara göre hatasız parçalamaktır.
+      Sen profesyonel bir Sandaluci Üretim Planlama Asistanısın. Görevin, gelen Excel verisini departmanlara göre hatasız parçalamak ve ÇİFT DİLLİ (Türkçe ve Rusça) olarak sunmaktır.
       
+      🚨 DİL KURALI: 
+      - Çalışanlar Rusça, patron (Barış Bey) Türkçe bilmektedir.
+      - "product" ve "details" alanlarını HER ZAMAN "[TR] ... / [RU] ..." formatında doldur.
+      - Örn: "product": "[TR] 274 Sandalye / [RU] 274 Стул"
+      - Örn: "details": "[TR] Kumaş: Dorian 12 / [RU] Ткань: Dorian 12"
+
       EXCEL SÜTUNLARI VE ANLAMLARI:
       - "ÜRÜN ADI" / "KOD": Ürün kimliği.
       - "ADET": Ürün miktarı.
-      - "İSKELET DURUMU" / "İSKELET": Eğer "YAPILACAK", "İSKELET YAPILACAK" veya karkas gereksinimi varsa -> "Karkas Üretimi" departmanı.
-      - "DİKİŞ": Eğer "YAPILACAK" veya kumaş bilgisi varsa -> "Dikişhane" departmanı.
-      - "DÖŞEME": Eğer "YAPILACAK" varsa -> "Döşemehane" departmanı.
-      - "KUMAŞ/BİRİM" / "KUMAŞ KODU" / "KUMAŞ": Kumaş detayları. (Örn: "Dorian 12", "Kadife")
+      - "İSKELET DURUMU" / "İSKELET": Eğer "YAPILACAK", "İSKELET YAPILACAK" veya karkas gereksinimi varsa -> "Karkas Üretimi" departmanına ata.
+      - "DİKİŞ": Eğer "YAPILACAK" veya kumaş bilgisi varsa -> "Dikişhane" departmanına ata.
+      - "DÖŞEME": Eğer "YAPILACAK" varsa -> "Döşemehane" departmanına ata.
+      - "KUMAŞ/BİRİM" / "KUMAŞ KODU" / "KUMAŞ": Kumaş detayları.
       - "BOYA" / "CİLA" / "RENK": Boya ve cila detayları (Örn: "72 Koyu Ceviz").
       
       🚨 KRİTİK KURALLAR:
@@ -209,10 +230,10 @@ export class OrderService {
         "customerName": "...",
         "items": [
           {
-            "product": "...",
+            "product": "[TR] ... / [RU] ...",
             "department": "...",
             "quantity": 0,
-            "details": "...",
+            "details": "[TR] ... / [RU] ...",
             "fabricDetails": {"name": "...", "amount": 0},
             "paintDetails": {"name": "..."},
             "source": "Production",
@@ -376,7 +397,7 @@ export class OrderService {
         `🏭 *ÜRETİME GİRECEK:*\n` +
         prodItems
           .map(
-            (i) => `- ${i.product} (${i.quantity} adet) -> *${i.department}*`,
+            (i) => `- ${i.product} (${i.quantity} adet) -> *${this.getDeptTranslation(i.department, "ru")}* (${i.department})`,
           )
           .join("\n") +
         `\n\n`;
@@ -403,7 +424,8 @@ export class OrderService {
     departments.forEach((dept) => {
       const staff = this.staffService.getStaffByDepartment(dept);
       if (staff.length > 0) {
-        mentions += `\n📍 *${dept}*: @${staff[0].name}`;
+        const ruDept = this.getDeptTranslation(dept, "ru");
+        mentions += `\n📍 *${ruDept}* (${dept}): @${staff[0].name}`;
       }
     });
 
@@ -438,7 +460,8 @@ export class OrderService {
     order.items.forEach((item, index) => {
       const product = OrderService.escapeMarkdown(item.product);
       const details = OrderService.escapeMarkdown(item.details || "Yok");
-      const dept = OrderService.escapeMarkdown(item.department);
+      const ruDept = this.getDeptTranslation(item.department, "ru");
+      const dept = OrderService.escapeMarkdown(`${ruDept} (${item.department})`);
       const worker = item.assignedWorker
         ? OrderService.escapeMarkdown(item.assignedWorker)
         : "⌛ Atama Bekliyor";
@@ -508,9 +531,9 @@ export class OrderService {
       doc.rect(30, 30, 535, 60).stroke();
       doc
         .font(boldFont)
-        .fontSize(22)
+        .fontSize(20)
         .fillColor("#1a1a1a")
-        .text("SANDALUCİ ÜRETİM İŞ EMRİ", 30, 45, {
+        .text("ÜRETİM İŞ EMRİ / ЗАКАЗ НА ПРОИЗВОДСТВО", 30, 45, {
           align: "center",
           width: 535,
         });
@@ -518,10 +541,15 @@ export class OrderService {
         .font(defaultFont)
         .fontSize(10)
         .fillColor("#555")
-        .text(`Departman: ${dept.toUpperCase()}`, 30, 70, {
-          align: "center",
-          width: 535,
-        });
+        .text(
+          `Departman / Отдел: ${this.getDeptTranslation(dept, "ru")} (${dept.toUpperCase()})`,
+          30,
+          70,
+          {
+            align: "center",
+            width: 535,
+          },
+        );
 
       doc.moveDown(3);
       const startY = 100;
@@ -543,10 +571,10 @@ export class OrderService {
 
       doc.rect(30, tableTop, 535, 20).fill("#f2f2f2").stroke("#ccc");
       doc.fillColor("#000").font(boldFont).fontSize(10);
-      doc.text("MODEL", colX[0] + 5, tableTop + 5);
-      doc.text("ÜRÜN KODU / ADI", colX[1] + 5, tableTop + 5);
-      doc.text("ADET", colX[2] + 5, tableTop + 5);
-      doc.text("DETAYLAR", colX[3] + 5, tableTop + 5);
+      doc.text("FOTO / ФОТО", colX[0] + 5, tableTop + 5);
+      doc.text("ÜRÜN / ПРОДУКТ", colX[1] + 5, tableTop + 5);
+      doc.text("ADET / КОЛ-ВО", colX[2] + 5, tableTop + 5);
+      doc.text("DETAYLAR / ДЕТАЛИ", colX[3] + 5, tableTop + 5);
 
       let currentY = tableTop + 20;
 

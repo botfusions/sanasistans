@@ -54,8 +54,11 @@ export class MessageHandler {
 
       await ctx.reply(`_"${transcribedText}"_`, { parse_mode: "Markdown" });
       originalText = transcribedText;
+    } else if (ctx.message.document) {
+      await this.handleDocument(ctx);
+      return;
     } else {
-      // Desteklenmeyen bir mesaj tipi, text veya voice değil
+      // Desteklenmeyen bir mesaj tipi, text, voice veya document değil
       return;
     }
 
@@ -83,6 +86,104 @@ export class MessageHandler {
 
     // Genel Mesaj İşleme (LLM + RAG simülasyonu)
     await this.handleGeneralMessage(ctx, originalText, isBoss);
+  }
+
+  private async handleDocument(ctx: Context) {
+    const doc = ctx.message?.document;
+    if (!doc) return;
+
+    const fileName = doc.file_name || "adsiz_dosya";
+    const isExcel =
+      fileName.endsWith(".xlsx") ||
+      fileName.endsWith(".xls") ||
+      doc.mime_type ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      doc.mime_type === "application/vnd.ms-excel";
+
+    if (!isExcel) {
+      // Excel değilse normal mesaj gibi mi davranmalı? Şimdilik sadece Excel'e odaklanıyoruz.
+      return;
+    }
+
+    await ctx.reply("📊 Excel sipariş dosyası algılandı, işleniyor...");
+
+    try {
+      const file = await ctx.getFile();
+      const fileUrl = `https://api.telegram.org/file/bot${ctx.api.token}/${file.file_path}`;
+
+      // Dosyayı indir
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error("Dosya indirilemedi");
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      // Excel'i parse et
+      const { XlsxUtils } = await import("../utils/xlsx-utils");
+      const rows = await XlsxUtils.parseExcel(buffer);
+
+      if (rows.length === 0) {
+        await ctx.reply("❌ Excel dosyası boş veya okunamadı.");
+        return;
+      }
+
+      const jsonContent = JSON.stringify(rows);
+      const order = await this.orderService.parseAndCreateOrder(
+        jsonContent,
+        fileName,
+        true,
+        rows,
+      );
+
+      if (order) {
+        // Taslağı DraftOrderService'e kaydet (index.ts'deki mantıkla uyumlu olması için gerekebilir)
+        // Ancak parseAndCreateOrder zaten persistOrder yapıyor ve orders.json'a kaydediyor.
+        // Kullanıcıya onay raporu gönderelim.
+        const summary = this.orderService.generateVisualTable(order);
+        
+        // Taslak olarak işaretleyip yönetici onayına sunma mantığı index.ts'de DraftOrderService ile yapılmış.
+        // Burada da benzer bir yapı kurabiliriz veya direkt oluşturulan siparişi raporlayabiliriz.
+        // Kullanıcının isteği "maildeki gibi kullanabilir miyiz" olduğu için DraftOrderService'e eklemek daha iyi olabilir.
+
+        const { DraftOrderService } = await import("../utils/draft-order.service");
+        const draftOrderService = DraftOrderService.getInstance();
+        const draftId = `tg_${Date.now()}`;
+        
+        // DraftOrderService beklediği formatta veriyi hazırlayalım
+        const floatingImages = (rows as any).floatingImages || [];
+        
+        draftOrderService.saveDraft(
+          draftId,
+          {
+            order: order,
+            images: floatingImages,
+            excelRows: rows
+          }
+        );
+
+        // Yöneticiye/Marina'ya butonlu mesaj gönder (Index.ts handleDraftMessageUpdate'e benzer)
+        const { InlineKeyboard } = await import("grammy");
+        const keyboard = new InlineKeyboard();
+        
+        // Varsayılan atamalar gerekebilir, şimdilik boş bırakalım
+        keyboard.text("🧵 Dikiş Seç", `select_dept_staff:${draftId}|Dikişhane`)
+                .row()
+                .text("🪑 Döşeme Seç", `select_dept_staff:${draftId}|Döşemehane`)
+                .row()
+                .text("❌ İptal", `reject_order:${draftId}`);
+
+        await ctx.reply(
+          `📝 *Yeni Excel Siparişi (Taslak)*\n\n${summary}\n\nLütfen birimleri atayarak üretimi başlatın.`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: keyboard,
+          }
+        );
+      } else {
+        await ctx.reply("❌ Sipariş verisi LLM tarafından ayrıştırılamadı.");
+      }
+    } catch (error) {
+      console.error("Telegram Excel processing error:", error);
+      await ctx.reply("❌ Dosya işlenirken bir hata oluştu.");
+    }
   }
 
   private async handleProductionRequest(
@@ -159,7 +260,7 @@ export class MessageHandler {
     const isReminderRequest = reminderKeywords.some((kw) => text.includes(kw));
 
     if (isReminderRequest) {
-      await this.handleReminderRequest(ctx, text, isBoss);
+      await this.handleReminderRequest(ctx, text);
       return;
     }
 
@@ -264,7 +365,6 @@ export class MessageHandler {
   private async handleReminderRequest(
     ctx: Context,
     text: string,
-    isBoss: boolean,
   ) {
     await ctx.reply("⏰ Hatırlatma talebinizi ayarlıyorum...");
 

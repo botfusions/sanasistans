@@ -169,6 +169,32 @@ const translations: Record<string, Record<Language, string>> = {
     tr: "🎨 Boya bölümüne iş emri otomatik gönderildi.",
     ru: "🎨 Заказ автоматически отправлен в покрасочный отдел.",
   },
+  // === Departmanlar ===
+  dept_karkas: {
+    tr: "Karkas Üretimi",
+    ru: "Производство каркаса",
+  },
+  dept_metal: {
+    tr: "Metal Üretimi",
+    ru: "Металлопроизводство",
+  },
+  dept_mobilya: {
+    tr: "Mobilya Dekorasyon",
+    ru: "Мебельный декор",
+  },
+  dept_sewing: {
+    tr: "Dikişhane",
+    ru: "Швейный цех",
+  },
+  dept_upholstery: {
+    tr: "Döşemehane",
+    ru: "Обивочный цех",
+  },
+  dept_paint: {
+    tr: "Boyahane",
+    ru: "Покрасочный цех",
+  },
+
   followup_summary_marina: {
     tr: "📊 *Takip Özeti*\n\n{summary}",
     ru: "📊 *Сводка отслеживания*\n\n{summary}",
