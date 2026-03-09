@@ -2,27 +2,32 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { Context } from "grammy";
-import FormData from "form-data";
 import fetch from "node-fetch";
+import Groq from "groq-sdk";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 
 export class VoiceService {
-  constructor() {}
+  private groq: Groq | null = null;
+
+  constructor() {
+    const groqKey = process.env.GROQ_API_KEY;
+    if (groqKey && groqKey.trim() !== "") {
+      this.groq = new Groq({ apiKey: groqKey });
+    }
+  }
 
   public async transcribeVoiceMessage(
     ctx: Context,
     fileId: string,
-    lang: string = "ru",
+    lang: string = "tr",
   ): Promise<string | null> {
-    const groqKey = process.env.GROQ_API_KEY;
-
-    if (!groqKey || groqKey.trim() === "") {
+    if (!this.groq) {
       console.error(
         "❌ GROQ_API_KEY bulunamadı. Lütfen .env dosyasına ekleyin.",
       );
-      return null; // Groq key is mandatory for STT if OpenRouter gives no STT.
+      return null;
     }
 
     try {
@@ -41,37 +46,20 @@ export class VoiceService {
       const tempFilePath = path.join(os.tmpdir(), `voice_${fileId}.ogg`);
       fs.writeFileSync(tempFilePath, buffer);
 
-      // Groq üzerinden Whisper V3 ile çeviri
-      const formData = new FormData();
-      formData.append("file", fs.createReadStream(tempFilePath));
-      formData.append("model", "whisper-large-v3");
-      formData.append("language", lang);
-      formData.append("response_format", "json");
-
-      const groqResponse = await fetch(
-        "https://api.groq.com/openai/v1/audio/transcriptions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${groqKey}`,
-          },
-          body: formData,
-        },
-      );
-
-      const data = (await groqResponse.json()) as any;
+      // Groq SDK kullanarak Whisper V3 ile çeviri
+      const transcription = await this.groq.audio.transcriptions.create({
+        file: fs.createReadStream(tempFilePath),
+        model: "whisper-large-v3",
+        language: lang,
+        response_format: "json",
+      });
 
       // İşlem bitince geçici dosyayı temizle
       if (fs.existsSync(tempFilePath)) {
         fs.unlinkSync(tempFilePath);
       }
 
-      if (!groqResponse.ok) {
-        console.error("Groq çeviri hatası:", data);
-        return null;
-      }
-
-      return data.text || null;
+      return transcription.text || null;
     } catch (error) {
       console.error("Sesli mesaj çeviri hatası:", error);
       return null;

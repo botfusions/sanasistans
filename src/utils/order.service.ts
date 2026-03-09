@@ -5,16 +5,12 @@ const { createCanvas, Image } = require("canvas");
 const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 import { OpenRouterService } from "./llm.service";
 import { StaffService } from "./staff.service";
-import { XlsxUtils, ExcelRow } from "./xlsx-utils";
+import { ExcelRow } from "./xlsx-utils";
 import { ImageEmbeddingService } from "./image-embedding.service";
 import { SupabaseService } from "./supabase.service";
 import { pino } from "pino";
 
-const logger = pino({
-  transport: {
-    target: "pino-pretty",
-  },
-});
+const logger = pino();
 
 export interface OrderItem {
   id: string; // OrderID_Index formatında
@@ -785,14 +781,16 @@ export class OrderService {
           const extension = item.imageExtension || "jpg";
 
           // 1. Resmi Yerel Klasöre Kaydet
-          const safeProductName = item.product.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+          const safeProductName = item.product
+            .replace(/[^a-z0-9]/gi, "_")
+            .toLowerCase();
           const fileName = `${order.id}_${item.id}_${safeProductName}_${Date.now()}.${extension}`;
           const filePath = path.join(imageDir, fileName);
           fs.writeFileSync(filePath, item.imageBuffer);
 
           // URL adresini /data/images formatında siparişe ekle
           item.imageUrl = `/data/images/${today}/${fileName}`;
-          
+
           // Güncellenmiş siparişi hem lokalin hem Supabase'in görmesi için order güncellensin
           await this.supabase.upsertOrderItem(item, order.id);
 
@@ -810,11 +808,14 @@ export class OrderService {
             order.id, // Pass the internal UUID/ID of the order, not the order number string
             [item.department, item.source],
             vector,
-            item.imageUrl || ""
+            item.imageUrl || "",
           );
           console.log(`✅ Görsel ve vektör kaydedildi: ${item.product}`);
         } catch (error) {
-          console.error(`❌ Görsel hafıza ve yerel kayıt hatası (${item.product}):`, error);
+          console.error(
+            `❌ Görsel hafıza ve yerel kayıt hatası (${item.product}):`,
+            error,
+          );
         }
       }
     }

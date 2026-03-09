@@ -15,11 +15,7 @@ import { DraftOrderService } from "./utils/draft-order.service";
 import { t, getUserLanguage } from "./utils/i18n";
 import { DoctorService } from "./utils/doctor.service";
 
-const logger = pino({
-  transport: {
-    target: "pino-pretty",
-  },
-});
+const logger = pino();
 
 // Çevresel değişkenleri yükle
 dotenv.config();
@@ -542,6 +538,18 @@ async function handleDraftMessageUpdate(ctx: any, draftId: string) {
 // --- YARDIMCI FONKSİYONLAR (GLOBAL SCOPE) ---
 
 /**
+ * Ürün durumunu günceller ve zaman damgası ekler
+ */
+function updateItemStatus(item: any, status: string, workerName?: string) {
+  item.status = status;
+  if (workerName) item.assignedWorker = workerName;
+  item.updatedAt = new Date().toISOString();
+  if (status === "uretimde" && !item.distributedAt) {
+    item.distributedAt = new Date().toISOString();
+  }
+}
+
+/**
  * Sipariş Dağıtımını Yönetir
  */
 async function processOrderDistribution(
@@ -711,10 +719,7 @@ async function processOrderDistribution(
         if (targetStaff) {
           for (const dItem of deptItems) {
             if (!dItem.assignedWorker) {
-              dItem.assignedWorker = targetStaff.name;
-              dItem.distributedAt = new Date().toISOString();
-              dItem.status = "uretimde";
-              dItem.updatedAt = new Date().toISOString();
+              updateItemStatus(dItem, "uretimde", targetStaff.name);
             }
           }
         }
@@ -1001,7 +1006,7 @@ if (chatId) {
                   try {
                     const productPhotos = order.items
                       .filter((i: any) => i.imageBuffer)
-                      .reduce((acc: any[], item: any) => {
+                      .reduce((acc: any[], item: any, _daysAfter: any) => {
                         if (
                           !acc.find((a: any) => a._rowIndex === item.rowIndex)
                         ) {
@@ -1216,14 +1221,20 @@ if (botEnabled) {
     const ctx = err.ctx;
     const error = err.error;
 
-    if (error instanceof GrammyError && error.description.includes("Conflict")) {
+    if (
+      error instanceof GrammyError &&
+      error.description.includes("Conflict")
+    ) {
       console.error(
         "⚠️ [Telegram Conflict] Bot başka bir yerde zaten çalışıyor. Polling durduruldu.",
       );
       return; // Süreci çökertme
     }
 
-    console.error(`❌ Bot hata yakaladı (Update ${ctx.update.update_id}):`, error);
+    console.error(
+      `❌ Bot hata yakaladı (Update ${ctx.update.update_id}):`,
+      error,
+    );
   });
 
   // Botu Başlat

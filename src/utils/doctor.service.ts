@@ -41,15 +41,19 @@ export class DoctorService {
     }
     const supabase = createClient(this.supabaseUrl, this.supabaseKey);
     try {
-      const { error } = await supabase.from("visual_memory").select("id").limit(1);
+      const { error } = await supabase
+        .from("visual_memory")
+        .select("id")
+        .limit(1);
       if (error) {
         if (error.message.includes("does not exist")) {
-           return {
-             service: "Vector Memory (pgvector)",
-             status: "ERROR",
-             message: "Hata: visual_memory tablosu bulunamadı.",
-             remedy: "Supabase SQL Editor üzerinden visual_memory tablosunu oluşturun."
-           };
+          return {
+            service: "Vector Memory (pgvector)",
+            status: "ERROR",
+            message: "Hata: visual_memory tablosu bulunamadı.",
+            remedy:
+              "Supabase SQL Editor üzerinden visual_memory tablosunu oluşturun.",
+          };
         }
         throw error;
       }
@@ -147,7 +151,11 @@ export class DoctorService {
   /**
    * TCP socket ile portu test eder — HTTP'ye gerek yok, salt bağlantı kontrolü.
    */
-  private testTcpPort(host: string, port: number, timeoutMs = 5000): Promise<number> {
+  private testTcpPort(
+    host: string,
+    port: number,
+    timeoutMs = 5000,
+  ): Promise<number> {
     return new Promise((resolve, reject) => {
       const net = require("net");
       const start = Date.now();
@@ -158,8 +166,14 @@ export class DoctorService {
         socket.destroy();
         resolve(elapsed);
       });
-      socket.on("error", (err: Error) => { socket.destroy(); reject(err); });
-      socket.on("timeout", () => { socket.destroy(); reject(new Error("Timeout")); });
+      socket.on("error", (err: Error) => {
+        socket.destroy();
+        reject(err);
+      });
+      socket.on("timeout", () => {
+        socket.destroy();
+        reject(new Error("Timeout"));
+      });
     });
   }
 
@@ -173,7 +187,11 @@ export class DoctorService {
 
     // Altyapı ve Genel İnternet kontrolleri
     const infraTargets = [
-      { host: "aejhzxvuegchakaknwts.supabase.co", port: 443, label: "Supabase" },
+      {
+        host: "aejhzxvuegchakaknwts.supabase.co",
+        port: 443,
+        label: "Supabase",
+      },
       { host: "google.com", port: 443, label: "Google (Internet)" },
     ];
 

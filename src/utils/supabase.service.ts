@@ -126,7 +126,7 @@ export class SupabaseService {
     orderId: string,
     tags: string[],
     vector: number[],
-    filePath: string
+    filePath: string,
   ) {
     const { data, error } = await this.client.from("visual_memory").upsert(
       {
@@ -139,18 +139,22 @@ export class SupabaseService {
         file_path: filePath,
         created_at: new Date().toISOString(),
       },
-      { onConflict: "id" }
+      { onConflict: "id" },
     );
 
     if (error) throw error;
     return data;
   }
 
-  async searchVisualMemory(queryVector: number[], matchThreshold = 0.7, matchCount = 3) {
-    const { data, error } = await this.client.rpc('match_visual_memory', {
+  async searchVisualMemory(
+    queryVector: number[],
+    matchThreshold = 0.7,
+    matchCount = 3,
+  ) {
+    const { data, error } = await this.client.rpc("match_visual_memory", {
       query_embedding: queryVector,
       match_threshold: matchThreshold,
-      match_count: matchCount
+      match_count: matchCount,
     });
 
     if (error) {

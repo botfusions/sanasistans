@@ -1,32 +1,59 @@
 "use client";
 
-import { Calendar, Package, Users } from "lucide-react"
-import { useOrders, useStats } from "@/hooks/use-data"
-import List01 from "./list-01"
-import List02 from "./list-02"
-import List03 from "./list-03"
+import { Calendar, Package, Users } from "lucide-react";
+import { useOrders, useStats } from "@/hooks/use-data";
+import List01 from "./list-01";
+import List02 from "./list-02";
+import List03 from "./list-03";
 
 export default function Content() {
-  const { orders, loading: ordersLoading } = useOrders()
-  const { stats, loading: statsLoading } = useStats()
+  const { orders, loading: ordersLoading } = useOrders();
+  const { stats, loading: statsLoading } = useStats();
 
   const staffStats = [
-    { id: "1", title: "Aktif Personel", balance: stats.activeStaff.toString(), type: "savings" as const, description: "Üretim bandında" },
-    { id: "2", title: "Bekleyen Sipariş", balance: stats.pendingProduction.toString(), type: "checking" as const, description: "Üretime hazır" },
-    { id: "3", title: "Bugün Tamamlanan", balance: stats.completedToday.toString(), type: "investment" as const, description: "Sevkiyata hazır" },
-    { id: "4", title: "Toplam Sipariş", balance: stats.totalOrders.toString(), type: "debt" as const, description: "Genel arşiv" },
-  ]
+    {
+      id: "1",
+      title: "Aktif Personel",
+      balance: stats.activeStaff.toString(),
+      type: "savings" as const,
+      description: "Üretim bandında",
+    },
+    {
+      id: "2",
+      title: "Bekleyen Sipariş",
+      balance: stats.pendingProduction.toString(),
+      type: "checking" as const,
+      description: "Üretime hazır",
+    },
+    {
+      id: "3",
+      title: "Bugün Tamamlanan",
+      balance: stats.completedToday.toString(),
+      type: "investment" as const,
+      description: "Sevkiyata hazır",
+    },
+    {
+      id: "4",
+      title: "Toplam Sipariş",
+      balance: stats.totalOrders.toString(),
+      type: "debt" as const,
+      description: "Genel arşiv",
+    },
+  ];
 
-  const recentOrders = orders.map(order => ({
+  const recentOrders = orders.map((order) => ({
     id: order.id.toString(),
     title: order.customer_name || "İsimsiz Müşteri",
     amount: order.total_amount ? `${order.total_amount} ₺` : "-",
     type: "incoming" as const,
     category: "shopping",
     icon: Package,
-    timestamp: new Date(order.created_at).toLocaleString('tr-TR'),
-    status: order.status === 'completed' ? 'completed' as const : 'pending' as const
-  }))
+    timestamp: new Date(order.created_at).toLocaleString("tr-TR"),
+    status:
+      order.status === "completed"
+        ? ("completed" as const)
+        : ("pending" as const),
+  }));
 
   return (
     <div className="space-y-4">
@@ -37,8 +64,8 @@ export default function Content() {
             Personel & Üretim Özeti
           </h2>
           <div className="flex-1">
-            <List01 
-              className="h-full" 
+            <List01
+              className="h-full"
               accounts={staffStats}
               totalBalance={`${stats.totalOrders} Sipariş`}
             />
@@ -50,10 +77,7 @@ export default function Content() {
             Son Siparişler
           </h2>
           <div className="flex-1">
-            <List02 
-              className="h-full" 
-              transactions={recentOrders}
-            />
+            <List02 className="h-full" transactions={recentOrders} />
           </div>
         </div>
       </div>
@@ -66,6 +90,5 @@ export default function Content() {
         <List03 />
       </div>
     </div>
-  )
+  );
 }
-

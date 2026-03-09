@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -7,30 +7,31 @@ import {
   CreditCard,
   type LucideIcon,
   ArrowRight,
-} from "lucide-react"
+} from "lucide-react";
 
 interface Transaction {
-  id: string
-  title: string
-  amount: string
-  type: "incoming" | "outgoing"
-  category: string
-  icon: LucideIcon
-  timestamp: string
-  status: "completed" | "pending" | "failed"
+  id: string;
+  title: string;
+  amount: string;
+  type: "incoming" | "outgoing";
+  category: string;
+  icon: LucideIcon;
+  timestamp: string;
+  status: "completed" | "pending" | "failed";
 }
 
 interface List02Props {
-  transactions?: Transaction[]
-  className?: string
+  transactions?: Transaction[];
+  className?: string;
 }
 
 const categoryStyles = {
   shopping: "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
   food: "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
   transport: "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
-  entertainment: "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
-}
+  entertainment:
+    "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
+};
 
 const TRANSACTIONS: Transaction[] = [
   {
@@ -93,9 +94,12 @@ const TRANSACTIONS: Transaction[] = [
     timestamp: "Yesterday",
     status: "pending",
   },
-]
+];
 
-export default function List02({ transactions = TRANSACTIONS, className }: List02Props) {
+export default function List02({
+  transactions = TRANSACTIONS,
+  className,
+}: List02Props) {
   return (
     <div
       className={cn(
@@ -110,9 +114,13 @@ export default function List02({ transactions = TRANSACTIONS, className }: List0
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Recent Activity
-            <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 ml-1">(23 transactions)</span>
+            <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 ml-1">
+              (23 transactions)
+            </span>
           </h2>
-          <span className="text-xs text-zinc-600 dark:text-zinc-400">This Month</span>
+          <span className="text-xs text-zinc-600 dark:text-zinc-400">
+            This Month
+          </span>
         </div>
 
         <div className="space-y-1">
@@ -138,8 +146,12 @@ export default function List02({ transactions = TRANSACTIONS, className }: List0
 
               <div className="flex-1 flex items-center justify-between min-w-0">
                 <div className="space-y-0.5">
-                  <h3 className="text-xs font-medium text-zinc-900 dark:text-zinc-100">{transaction.title}</h3>
-                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400">{transaction.timestamp}</p>
+                  <h3 className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                    {transaction.title}
+                  </h3>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                    {transaction.timestamp}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-1.5 pl-3">
@@ -192,6 +204,5 @@ export default function List02({ transactions = TRANSACTIONS, className }: List0
         </button>
       </div>
     </div>
-  )
+  );
 }
-

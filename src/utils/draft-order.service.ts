@@ -1,5 +1,3 @@
-import { OrderDetail } from "./order.service";
-
 export interface DraftOrder {
   order: any;
   images: any[];

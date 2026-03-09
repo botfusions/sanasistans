@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
   BarChart2,
@@ -14,18 +14,18 @@ import {
   Settings,
   HelpCircle,
   Menu,
-} from "lucide-react"
+} from "lucide-react";
 
-import { Home } from "lucide-react"
-import Link from "next/link"
-import { useState } from "react"
-import Image from "next/image"
+import { Home } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import Image from "next/image";
 
 export default function Sidebar() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   function handleNavigation() {
-    setIsMobileMenuOpen(false)
+    setIsMobileMenuOpen(false);
   }
 
   function NavItem({
@@ -33,9 +33,9 @@ export default function Sidebar() {
     icon: Icon,
     children,
   }: {
-    href: string
-    icon: any
-    children: React.ReactNode
+    href: string;
+    icon: any;
+    children: React.ReactNode;
   }) {
     return (
       <Link
@@ -46,7 +46,7 @@ export default function Sidebar() {
         <Icon className="h-4 w-4 mr-3 flex-shrink-0" />
         {children}
       </Link>
-    )
+    );
   }
 
   return (
@@ -162,6 +162,5 @@ export default function Sidebar() {
         />
       )}
     </>
-  )
+  );
 }
-

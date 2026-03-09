@@ -19,6 +19,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Aşama 2: Departman Dağıtımı:** Tek bir siparişi parçalara bölüp; Karkas, Dikişhane ve Döşemehane'ye ilgili kısımları resimli olarak gönderme (Multi-Dept Logic) kuruldu.
 - **Aşama 3: Personel & Verimlilik:** Parça başı (Piecework) takip sistemi ve "Marina" onay mekanizması ile üretim disiplini sağlandı.
 - **Aşama 4: Görsel Hafıza:** Supabase (pgvector) vektör veritabanı ile geçmiş ürün görsellerinden benzerlik araması yapabilen "Görsel Bellek" entegre edildi. Görseller VPS üzerindeki yerel depolama biriminde güvenle saklanır.
+- **Aşama 5: Sesli Komut & Telegram Voice:** Telegram üzerinden gelen sesli mesajları (Voice Message) OpenAI/Grok/Gemini altyapısı ile metne dönüştürüp analiz eden ve ilgili departmanlara not olarak ileten sesli asistan yeteneği kazandırıldı.
 
 ### 3. Bot Stabilitesi & Çakışma Yönetimi (Mart 2026)
 

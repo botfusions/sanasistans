@@ -5,10 +5,6 @@ import pino from "pino";
 const execAsync = promisify(exec);
 const logger = pino({
   name: "CalendarService",
-  transport: {
-    target: "pino-pretty",
-    options: { colorize: true },
-  },
 });
 
 export interface CalendarEvent {

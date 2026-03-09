@@ -32,7 +32,11 @@ export class MessageHandler {
       originalText = ctx.message.text;
     } else if (ctx.message.voice) {
       await ctx.reply("🎙️ Sesli mesajınızı dinliyorum, lütfen bekleyin...");
-      const voiceLang = (ctx as any).role === "boss" ? "tr" : "ru";
+
+      // Kullanıcının rolüne göre dil seçimi (Boss: tr, Diğerleri: ru/tr karışık olabilir ama varsayılan tr olsun istendi)
+      const isBoss = (ctx as any).role === "boss";
+      const voiceLang = isBoss ? "tr" : "ru";
+
       const transcribedText = await this.voiceService.transcribeVoiceMessage(
         ctx,
         ctx.message.voice.file_id,
@@ -41,7 +45,9 @@ export class MessageHandler {
 
       if (!transcribedText) {
         await ctx.reply(
-          "❌ Sesli mesajınızı çözümleyemedim veya OpenAI API anahtarı ayarlanmamış.",
+          isBoss
+            ? "❌ Sesli mesajınızı çözümleyemedim. Lütfen tekrar deneyin veya yazılı mesaj gönderin."
+            : "❌ Не удалось расшифровать голосовое сообщение.",
         );
         return;
       }
@@ -55,13 +61,8 @@ export class MessageHandler {
 
     const text = originalText.toLowerCase();
     const role = (ctx as any).role;
-    const staffInfo = (ctx as any).staffInfo;
+    const _staffInfo = (ctx as any).staffInfo;
     const isBoss = role === "boss";
-
-    // Gönderici ismini belirle
-    const senderName = isBoss
-      ? "Cenk Bey"
-      : staffInfo?.name || ctx.from?.first_name || "Bilinmeyen";
 
     // Malzeme Talebi Tespiti (Geliştirilmiş Regex/Keyword)
     const productionKeywords = [
