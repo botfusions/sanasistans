@@ -21,6 +21,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Aşama 4: Görsel Hafıza:** Supabase (pgvector) vektör veritabanı ile geçmiş ürün görsellerinden benzerlik araması yapabilen "Görsel Bellek" entegre edildi. Görseller VPS üzerindeki yerel depolama biriminde güvenle saklanır.
 - **Aşama 5: Sesli Komut & Telegram Voice:** Telegram üzerinden gelen sesli mesajları (Voice Message) OpenAI/Grok/Gemini altyapısı ile metne dönüştürüp analiz eden ve ilgili departmanlara not olarak ileten sesli asistan yeteneği kazandırıldı.
 - **Aşama 6: Telegram Excel İşleme (Mart 2026):** Telegram üzerinden gönderilen `.xlsx` ve `.xls` dosyalarını otomatik olarak indiren, `XlsxUtils` ile ayrıştıran ve `OrderService` üzerinden sipariş taslağına dönüştüren uçtan uca dosya işleme akışı entegre edildi.
+- **Aşama 7: Gelişmiş Test Modu & Fallback (Mart 2026):** Departmanlarda kayıtlı personel olmasa bile sistemin tıkanmaması için `StaffService` üzerinden "Otomatik Test Personeli" (Fallback) mantığı eklendi. Tüm dağıtımlar yönetici hesabına yönlendirilerek uçtan uca test imkanı sağlandı.
 
 ### 3. Bot Stabilitesi & Çakışma Yönetimi (Mart 2026)
 
@@ -52,6 +53,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 ### 4. Güvenlik & İzleme
 
 - **Mükerrer İşlem Önleme:** E-posta UID'leri `processed_uids.json` ile kalıcı olarak depolanır.
+- **Gmail Temizleme (Cleanup):** `clear-gmail.ts` scripti ile gelen kutusundaki tüm test verilerini tek komutla temizleme yeteneği.
 - **Doctor Service (TCP Check):** Sistem sağlığını (Database, LLM, Gmail Portları, Network Latency) anlık denetleyen `/doctor` komutu. Mail portları TCP socket seviyesinde taranır.
 
 ---
@@ -62,6 +64,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Veritabanı:** Supabase (SQL & pgvector).
 - **Excel Analizi:** `xlsx` ve `exceljs` kütüphaneleri ile derinlemesine dosya ve resim ayrıştırma.
 - **Arşivleme:** İşlenen sipariş formları `data/orders` altında, görseller ise `data/images` altında.
+- **Takvim Yönetimi:** `gogcli` (v0.12.0) entegrasyonu ile Google Calendar üzerinden tam ajanda yönetimi.
 - **Deployment:** Docker & Coolify (Port 3000 Healthcheck aktif).
 
 ## 🚀 Kurulum
