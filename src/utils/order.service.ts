@@ -3,9 +3,10 @@ import * as path from "path";
 const PDFDocument = require("pdfkit");
 const { createCanvas } = require("canvas");
 const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
+import { pathToFileURL } from "url";
 import { OpenRouterService } from "./llm.service";
 import { StaffService } from "./staff.service";
-import { ExcelRow } from "./xlsx-utils";
+import { ExcelRow, XlsxUtils } from "./xlsx-utils";
 import { ImageEmbeddingService } from "./image-embedding.service";
 import { SupabaseService } from "./supabase.service";
 import { t, Language } from "./i18n";
@@ -53,6 +54,7 @@ export interface OrderDetail {
   items: OrderItem[];
   deliveryDate: string;
   status: "new" | "processing" | "completed" | "archived";
+  isDuplicate?: boolean; // Mükerrer sipariş kontrolü için
   createdAt: string;
   updatedAt: string;
 }
@@ -60,6 +62,46 @@ export interface OrderDetail {
 export class OrderService {
   private orders: OrderDetail[] = [];
   private filePath: string;
+
+  /**
+   * Levenshtein mesafesi hesaplayan metin benzerliği hesaplama
+   * 0.0 (tamamen farklı) ile 1.0 (tamamen aynı) arasında değer döndürür
+   */
+  private calculateSimilarity(str1: string, str2: string): number {
+    if (!str1 || !str2) return 0;
+    if (str1 === str2) return 1;
+
+    const len1 = str1.length;
+    const len2 = str2.length;
+    const maxLen = Math.max(len1, len2);
+
+    // Boş string kontrolü
+    if (maxLen === 0) return 1;
+
+    // Levenshtein mesafesi hesapla
+    const matrix: number[][] = [];
+
+    for (let i = 0; i <= len1; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= len2; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1, // Silme
+          matrix[i][j - 1] + 1, // Ekleme
+          matrix[i - 1][j - 1] + cost, // Değiştirme
+        );
+      }
+    }
+
+    const distance = matrix[len1][len2];
+    return 1 - distance / maxLen;
+  }
   private archivePath: string;
   private logPath: string;
   private llmService: OpenRouterService;
@@ -166,9 +208,10 @@ export class OrderService {
       "Karkas Üretimi": "dept_karkas",
       "Metal Üretimi": "dept_metal",
       "Mobilya Dekorasyon": "dept_mobilya",
-      "Dikişhane": "dept_sewing",
-      "Döşemehane": "dept_upholstery",
-      "Boyahane": "dept_paint",
+      Dikişhane: "dept_sewing",
+      Döşemehane: "dept_upholstery",
+      Boyahane: "dept_paint",
+      Kumaş: "dept_fabric",
     };
     const key = mapping[dept];
     return key ? t(key, lang) : dept;
@@ -178,13 +221,50 @@ export class OrderService {
    * Email veya Excel içeriğini analiz eder.
    */
   async parseAndCreateOrder(
-    content: string,
     subject: string,
-    isExcel: boolean = false,
-    rawExcelData?: ExcelRow[],
+    content: string,
+    uid: string,
+    attachments?: any[],
   ): Promise<OrderDetail | null> {
-    const prompt = `
-      Sen profesyonel bir Sandaluci Üretim Planlama Asistanısın. Görevin, gelen Excel verisini departmanlara göre hatasız parçalamak ve ÇİFT DİLLİ (Türkçe ve Rusça) olarak sunmaktır.
+    try {
+      let fullContent = `Konu: ${subject}\n\nİçerik:\n${content}`;
+      let isExcel = false; // Flag to indicate if Excel data was processed
+      let rawExcelData: ExcelRow[] | undefined; // To store parsed Excel data if any
+
+      // Excel eklerini işle - XlsxUtils kullan (resimleri de alır)
+      if (attachments && attachments.length > 0) {
+        for (const attachment of attachments) {
+          if (
+            attachment.contentType ===
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+            attachment.filename?.endsWith(".xlsx")
+          ) {
+            try {
+              // XlsxUtils kullan - resimleri de içerir
+              rawExcelData = await XlsxUtils.parseExcel(attachment.content);
+
+              // Tablo formatında içerik oluştur (LLM için)
+              const tableContent = XlsxUtils.formatToTable(rawExcelData);
+              fullContent += `\n\n--- EK DOSYA İÇERİĞİ (${attachment.filename}) ---\n${tableContent}`;
+              isExcel = true;
+              console.log(
+                `📊 [DEBUG] Excel eki XlsxUtils ile okundu: ${attachment.filename}, ${rawExcelData.length} satır`,
+              );
+            } catch (err) {
+              console.error(
+                `❌ [DEBUG] Excel okuma hatası (${attachment.filename}):`,
+                err,
+              );
+            }
+          }
+        }
+      }
+
+      const prompt = `
+      Sen profesyonel bir Sandaluci Üretim Planlama Asistanısın. Görevin, gelen veriyi (EXCEL tablosu veya E-POSTA gövdesi) analiz ederek departmanlara göre hatasız parçalamak ve ÇİFT DİLLİ (Türkçe ve Rusça) sipariş verisi oluşturmaktır.
+      
+      🚨 ÖNEMLİ: Girdi bir E-POSTA metniyse (özellikle "Fwd:" ile başlayan forwarded mailler), mailin alt kısımlarındaki asıl sipariş detaylarını bul ve odaklan. 
+      E-postanın en üstündeki yönlendirme bilgilerini (From, Date, Subject) geçerek, asıl mesaj gövdesindeki sipariş kalemlerini (Ürün, Adet, Kumaş, Boya vb.) tespit et.
       
       🚨 DİL KURALI: 
       - Çalışanlar Rusça, patron (Barış Bey) Türkçe bilmektedir.
@@ -192,38 +272,21 @@ export class OrderService {
       - Örn: "product": "[TR] 274 Sandalye / [RU] 274 Стул"
       - Örn: "details": "[TR] Kumaş: Dorian 12 / [RU] Ткань: Dorian 12"
 
-      EXCEL SÜTUNLARI VE ANLAMLARI:
-      - "ÜRÜN ADI" / "KOD": Ürün kimliği.
-      - "ADET": Ürün miktarı.
-      - "İSKELET DURUMU" / "İSKELET": Eğer "YAPILACAK", "İSKELET YAPILACAK" veya karkas gereksinimi varsa -> "Karkas Üretimi" departmanına ata.
-      - "DİKİŞ": Eğer "YAPILACAK" veya kumaş bilgisi varsa -> "Dikişhane" departmanına ata.
-      - "DÖŞEME": Eğer "YAPILACAK" varsa -> "Döşemehane" departmanına ata.
-      - "KUMAŞ/BİRİM" / "KUMAŞ KODU" / "KUMAŞ": Eğer kumaş bilgisi varsa -> Kumaş tedariki için "Kumaş" departmanına ata.
-      - "BOYA" / "CİLA" / "RENK": Boya ve cila detayları (Örn: "72 Koyu Ceviz").
-      
-      🚨 KRİTİK KURALLAR:
-      1. ÜRÜN PARÇALAMA: Bir satırda birden fazla departman (İskelet, Dikiş, Döşeme) işaretlenmişse, HER BİRİ İÇİN AYRI kalem oluştur.
-      2. DETAYLARIN KORUNMASI: "Kumaş", "Boya" ve "Teknik Not" bilgilerini, o ürünle ilgili TÜM parçalanmış kalemlerin (İskelet, Dikiş, Döşeme vb.) "details" metnine MUTLAKA EKLE. 
-         Örneğin: Dikişhane kalemi için details: "Kumaş: Dorian 12. Dikiş yapılacak."
-         Örneğin: Karkas üretimi için details: "Boya: 72 Ceviz. İskelet üretimi."
-      3. FABRIC VE PAINT ALANLARI: "fabricDetails" ve "paintDetails" nesnelerini her kalem için doldur. Kumaş yoksa boş bırakma, "Yok" yaz.
-      4. DEPARTMAN ATAMA: Sadece şu departmanları kullan: "Karkas Üretimi", "Metal Üretimi", "Mobilya Dekorasyon", "Dikişhane", "Döşemehane", "Boyahane", "Kumaş".
-      5. MÜŞTERİ BİLGİSİ: "MÜŞTERİ ADI" ve varsa "ADRES" alanlarını birleştirerek "customerName" yap.
-      
-      🚨 DEPARTMAN ÖZEL KURALLARI:
-      - Dikişhane: Sadece kumaş kodu ve dikiş detaylarını ekle.
-      - Döşemehane: Sadece ürün adı ve döşeme notlarını ekle.
-      - Boyahane: Sadece boya rengi ve cila notlarını ekle.
-      - Kumaş: Sadece kumaş kodu ve miktar ihtiyacını ekle.
-      
-      ÖRNEK:
-      Girdi: Ürün: 274 Sandalye, İskelet: YAPILACAK, Dikiş: YAPILACAK, Kumaş: Kadife Yeşil, Boya: 72 Ceviz
-      Çıktı (Items):
-      - Part 1: Product: "274 Sandalye", Dept: "Karkas Üretimi", Details: "Boya: 72 Ceviz. İskelet üretimi."
-      - Part 2: Product: "274 Sandalye", Dept: "Dikişhane", Details: "Kumaş: Kadife Yeşil. Dikiş yapılacak."
+      DEPARTMAN ATAMA KURALLARI:
+      - İSKELET/KARKAS: Eğer "YAPILACAK", "İSKELET YAPILACAK" veya karkas gereksinimi varsa -> "Karkas Üretimi".
+      - DİKİŞ/DÖŞEME: Kumaş kaplama, dikiş veya döşeme notu varsa -> HEM "Dikişhane" HEM DE "Döşemehane" için ayrı kalemler oluştur.
+      - KUMAŞ TEDARİK: Kumaş adı/kodu varsa -> "Kumaş" departmanına Marina Hanım için ayrı bir kalem oluştur. 
+      - BOYA/CİLA: Boya rengi veya cila notu varsa -> "Boyahane" departmanına kalem oluştur.
+      - DİĞER: "Metal Üretimi", "Mobilya Dekorasyon".
 
-      İÇERİK (Excel JSON):
-      ${content}
+      🚨 KRİTİK KURALLAR:
+      1. ÜRÜN PARÇALAMA: Her bir departman işi için AYRI kalem (item) oluştur.
+      2. DETAYLARIN KORUNMASI: Kumaş, boya ve teknik notları ilgili TÜM kalemlerin "details" kısmına ekle.
+      3. FABRIC VE PAINT ALANLARI: "fabricDetails" ve "paintDetails" nesnelerini doldur.
+      4. MÜŞTERİ BİLGİSİ: "customerName" alanına müşteri adını ve varsa proje adını yaz. Mail içinde "Müşteri:", "Proje:" veya "Ad Soyad:" gibi ifadeleri ara.
+      
+      İÇERİK:
+      ${fullContent}
       
       SADECE SAF JSON DÖNDÜR:
       {
@@ -245,28 +308,73 @@ export class OrderService {
       }
     `;
 
-    try {
+      console.log("--- RAW MAIL CONTENT START ---");
+      console.log(content);
+      console.log("--- RAW MAIL CONTENT END ---");
+
       if (isExcel) {
         console.log(
-          `📊 Excel verisi LLM'e gönderiliyor (${content.length} karakter)`,
+          `📊 Excel verisi LLM'e gönderiliyor (${fullContent.length} karakter)`,
         );
       }
 
-      const response = await this.llmService.chat(
-        prompt,
-        "Sipariş ve Koordinasyon Analiz Modu.",
+      console.log(`🧠 [DEBUG] LLM Parametreleri:`, {
+        subject,
+        contentLength: fullContent.length,
+        contentPreview: fullContent.substring(0, 500),
+      });
+
+      const response = await this.llmService.chat(prompt, fullContent);
+
+      console.log(
+        `[DEBUG] LLM Raw Response Received: ${response?.substring(0, 500)}...`,
       );
       if (!response) return null;
 
       // Extract JSON block more robustly
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        console.error("❌ LLM yanıtında JSON bulunamadı:", response);
+        console.error("❌ LLM yanıtında JSON bulunamadı. Ham yanıt:", response);
         return null;
       }
 
       const jsonStr = jsonMatch[0].trim();
-      const parsed = JSON.parse(jsonStr);
+      let parsed;
+      try {
+        // Log candidate for debugging if needed (shortened)
+        // console.log("🔍 JSON Adayı:", jsonStr.substring(0, 500) + "...");
+
+        let cleanJsonStr = jsonStr
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Remove control characters
+          .replace(/\\+"/g, '"') // Fix double escapes
+          .trim();
+
+        // Ensure we only have what's between { and }
+        const firstBrace = cleanJsonStr.indexOf("{");
+        const lastBrace = cleanJsonStr.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          cleanJsonStr = cleanJsonStr.substring(firstBrace, lastBrace + 1);
+        }
+
+        parsed = JSON.parse(cleanJsonStr);
+      } catch (parseErr) {
+        console.error("❌ LLM JSON parse hatası:", parseErr);
+        console.error("📄 [KRİTİK] Ham Yanıt (Hata anı):", jsonStr); // FULL RESPONSE FOR DEBUGGING
+
+        if (parseErr instanceof SyntaxError) {
+          const match = parseErr.message.match(/at position (\d+)/);
+          if (match) {
+            const pos = parseInt(match[1]);
+            const context = jsonStr.substring(
+              Math.max(0, pos - 50),
+              Math.min(jsonStr.length, pos + 50),
+            );
+            console.error(`📍 Hata konumu (${pos}):\n...${context}...`);
+          }
+        }
+        return null;
+      }
+
       console.log(
         `🧠 [DEBUG] LLM Ayrıştırma Başarılı. Ürün Sayısı: ${parsed.items?.length || 0}`,
       );
@@ -282,6 +390,63 @@ export class OrderService {
           2,
         ),
       );
+
+      // 🚨 İÇERİK BAZLI MÜKERRER KONTROLÜ
+      // Aynı müşteri + benzer ürün kombinasyonunu kontrol et
+      const allOrders = this.orders;
+      const customerName = (parsed.customerName || "").toLowerCase().trim();
+      const newProducts = (parsed.items || [])
+        .map((i: any) =>
+          (i.product || "")
+            .toLowerCase()
+            .replace(/\[tr\].*?\[ru\].*?/gi, "")
+            .trim(),
+        )
+        .sort()
+        .join(",");
+
+      // Son 24 saat içindeki aynı müşteri siparişlerini kontrol et
+      const oneDayAgo = new Date(
+        Date.now() - 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const recentOrders = allOrders.filter(
+        (o: OrderDetail) => o.createdAt > oneDayAgo,
+      );
+
+      for (const existingOrder of recentOrders) {
+        const existingCustomerName = (existingOrder.customerName || "")
+          .toLowerCase()
+          .trim();
+        const existingProducts = (existingOrder.items || [])
+          .map((i: any) =>
+            (i.product || "")
+              .toLowerCase()
+              .replace(/\[tr\].*?\[ru\].*?/gi, "")
+              .trim(),
+          )
+          .sort()
+          .join(",");
+
+        // Müşteri adı benzer mi (%80) ve ürün kombinasyonu benzer mi (%70)?
+        const customerSimilarity = this.calculateSimilarity(
+          customerName,
+          existingCustomerName,
+        );
+        const productSimilarity = this.calculateSimilarity(
+          newProducts,
+          existingProducts,
+        );
+
+        if (customerSimilarity > 0.8 && productSimilarity > 0.7) {
+          logger.warn(
+            `⚠️ Mükerrer sipariş tespit edildi! Müşteri: "${customerName}" → Mevcut: "${existingCustomerName}" (Benzerlik: ${Math.round(customerSimilarity * 100)}%)`,
+          );
+          logger.warn(
+            `⚠️ Ürün kombinasyonu benzerliği: ${Math.round(productSimilarity * 100)}%`,
+          );
+          return { ...existingOrder, isDuplicate: true }; // Mevcut siparişi bayrakla döndür
+        }
+      }
 
       const order: OrderDetail = {
         id: Date.now().toString(),
@@ -359,12 +524,15 @@ export class OrderService {
         });
       }
 
-      // Görsel hafıza arka planda çalışsın - sipariş akışını bloklamasın
-      this.saveToVisualMemory(order).catch((e) => {
-        console.error("⚠️ Görsel hafıza kaydı atlandı (hata):", e);
-      });
-
       await this.persistOrder(order);
+
+      // Görsel hafıza - Artık ana sipariş DB'de olduğu için güvenle çalışabilir
+      try {
+        await this.saveToVisualMemory(order);
+      } catch (e) {
+        console.error("⚠️ Görsel hafıza kaydı atlandı (hata):", e);
+      }
+
       await this.logOrder(order);
       return order;
     } catch (error) {
@@ -376,8 +544,9 @@ export class OrderService {
   /**
    * Görsel bir özet tablo oluşturur.
    */
-  getVisualSummary(order: OrderDetail): string {
-    let summary = `📦 *Sipariş Koordinasyon Özeti* (${order.customerName})\n`;
+  getVisualSummary(order: OrderDetail, lang: Language = "tr"): string {
+    const title = t("summary_title", lang);
+    let summary = `${title} (${order.customerName})\n`;
     summary += `--------------------------------------------\n`;
 
     // Gruplandırma
@@ -387,7 +556,7 @@ export class OrderService {
 
     if (stockItems.length > 0) {
       summary +=
-        `🏬 *STOKTAN TESLİM:*\n` +
+        `${t("stock_delivery", lang)}\n` +
         stockItems
           .map((i) => `- ${i.product} (${i.quantity} adet)`)
           .join("\n") +
@@ -395,23 +564,24 @@ export class OrderService {
     }
     if (prodItems.length > 0) {
       summary +=
-        `🏭 *ÜRETİME GİRECEK:*\n` +
+        `${t("production_entry", lang)}\n` +
         prodItems
           .map(
-            (i) => `- ${i.product} (${i.quantity} adet) -> *${this.getDeptTranslation(i.department, "ru")}* (${i.department})`,
+            (i) =>
+              `- ${i.product} (${i.quantity} adet) -> *${this.getDeptTranslation(i.department, lang)}* (${i.department})`,
           )
           .join("\n") +
         `\n\n`;
     }
     if (extItems.length > 0) {
       summary +=
-        `🛒 *DIŞ ALIM / TEDARİK:*\n` +
+        `${t("external_purchase", lang)}\n` +
         extItems.map((i) => `- ${i.product} (${i.quantity} adet)`).join("\n") +
         `\n\n`;
     }
 
-    summary += `📅 *Termin:* ${order.deliveryDate}\n`;
-    summary += `🧭 _Ayça koordinasyon planını hazırladı._`;
+    summary += `📅 *${t("delivery_label", lang)}:* ${order.deliveryDate}\n`;
+    summary += `${t("coordinator_note", lang)}`;
 
     return summary;
   }
@@ -434,6 +604,17 @@ export class OrderService {
   }
 
   /**
+   * Telegram HTML karakterlerini kaçırır.
+   */
+  static escapeHTML(text: string): string {
+    if (!text) return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  /**
    * Telegram Markdown karakterlerini kaçırır.
    */
   static escapeMarkdown(text: string): string {
@@ -445,48 +626,53 @@ export class OrderService {
 
   /**
    * Estetik bir tablo formatında görsel özet oluşturur.
+   * Boss için TR, genel için RU başlıklar kullanır.
    */
-  generateVisualTable(order: OrderDetail): string {
-    const customer = OrderService.escapeMarkdown(order.customerName);
-    const orderNo = OrderService.escapeMarkdown(order.orderNumber);
-    const delivery = OrderService.escapeMarkdown(order.deliveryDate);
+  generateVisualTable(order: OrderDetail, lang: Language = "ru"): string {
+    const customer = OrderService.escapeHTML(order.customerName);
+    const orderNo = OrderService.escapeHTML(order.orderNumber);
+    const delivery = OrderService.escapeHTML(order.deliveryDate);
 
-    let table = `📊 *SİPARİŞ DAĞITIM RAPORU*\n`;
+    const title = t("report_title", lang);
+    const labelCustomer = t("customer_label", lang);
+    const labelOrder = t("order_label", lang);
+    const labelTermin = t("delivery_label", lang);
+    const labelProduct = t("product_label", lang);
+    const labelDept = t("dept_label", lang);
+    const labelWorker = t("worker_label", lang);
+    const labelDetails = t("details_label", lang);
+
+    let table = `<b>${title}</b>\n`;
+    table += `👤 ${labelCustomer}: <code>${customer}</code>\n`;
+    table += `📂 ${labelOrder}: <code>${orderNo}</code>\n`;
+    table += `📅 ${labelTermin}: <b>${delivery}</b>\n`;
     table += `━━━━━━━━━━━━━━━━━━━━\n`;
-    table += `👤 *Müşteri:* ${customer}\n`;
-    table += `🆔 *Sipariş:* ${orderNo}\n`;
-    table += `📅 *Termin:* ${delivery}\n`;
-    table += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    table += `📦 <b>${labelProduct}</b>\n\n`;
 
     order.items.forEach((item, index) => {
-      const product = OrderService.escapeMarkdown(item.product);
-      const details = OrderService.escapeMarkdown(item.details || "Yok");
-      const ruDept = this.getDeptTranslation(item.department, "ru");
-      const dept = OrderService.escapeMarkdown(`${ruDept} (${item.department})`);
-      const worker = item.assignedWorker
-        ? OrderService.escapeMarkdown(item.assignedWorker)
-        : "⌛ Atama Bekliyor";
+      const product = OrderService.escapeHTML(item.product);
+      const dept = OrderService.escapeHTML(
+        this.getDeptTranslation(item.department, lang),
+      );
+      const worker = OrderService.escapeHTML(
+        item.assignedWorker || t("dist_not_assigned", lang),
+      );
+      const details = item.details
+        ? OrderService.escapeHTML(item.details)
+        : "";
 
-      table += `${index + 1}. 📦 *Ürün:* ${product}\n`;
-      table += `   🛠 *Birim:* ${dept}\n`;
-      table += `   👤 *Görevli:* ${worker}\n`;
-      table += `   📝 *Detay:* ${details}\n`;
+      table += `<b>${index + 1}.</b> ${product}\n`;
+      table += `   👉 <i>${dept}</i>\n`;
+      table += `   👷 <b>Personel:</b> ${worker}\n`;
+      if (details) table += `   📝 <b>Not:</b> ${details}\n`;
       table += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
     });
 
-    table += `\n✅ _Tüm birimlere iş emirleri iletildi._`;
+    table += `\n⚠️ <i>${t("pdf_footer", lang)}</i>`;
 
     return table;
   }
-
-  /**
-   * Departman için PDF iş emri oluşturur.
-   */
-  async generateJobOrderPDF(
-    items: OrderItem[],
-    customerName: string,
-    dept: string,
-  ): Promise<Buffer> {
+  async generateMarinaSummaryPDF(order: OrderDetail): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 30, size: "A4" });
       const chunks: Buffer[] = [];
@@ -495,7 +681,6 @@ export class OrderService {
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", (err: Error) => reject(err));
 
-      // Fontları kaydet (Türkçe karakter desteği için)
       const fontRegular = path.join(
         process.cwd(),
         "src",
@@ -510,160 +695,240 @@ export class OrderService {
         "fonts",
         "Roboto-Bold.ttf",
       );
-
-      try {
-        if (fs.existsSync(fontRegular) && fs.existsSync(fontBold)) {
-          doc.registerFont("Roboto", fontRegular);
-          doc.registerFont("Roboto-Bold", fontBold);
-        }
-      } catch (err) {
-        console.warn(
-          "⚠️ Roboto fontlari yüklenemedi. Standart font kullanılıyor.",
-        );
-      }
-
-      // Default fontu ayarla fallback olarak
-      const defaultFont = fs.existsSync(fontRegular) ? "Roboto" : "Helvetica";
-      const boldFont = fs.existsSync(fontBold)
-        ? "Roboto-Bold"
-        : "Helvetica-Bold";
+      const defaultFont = fs.existsSync(fontRegular)
+        ? fontRegular
+        : "Helvetica";
+      const boldFont = fs.existsSync(fontBold) ? fontBold : "Helvetica-Bold";
 
       // --- HEADER ---
-      doc.rect(30, 30, 535, 60).stroke();
+      doc.rect(30, 30, 535, 60).fill("#1a1a1a");
       doc
         .font(boldFont)
-        .fontSize(20)
-        .fillColor("#1a1a1a")
-        .text("ÜRETİM İŞ EMRİ / ЗАКАЗ НА ПРОИЗВОДСТВО", 30, 45, {
+        .fontSize(18)
+        .fillColor("#ffffff")
+        .text(t("pdf_marina_header", "ru"), 30, 45, {
           align: "center",
           width: 535,
         });
       doc
         .font(defaultFont)
         .fontSize(10)
-        .fillColor("#555")
-        .text(
-          `Departman / Отдел: ${this.getDeptTranslation(dept, "ru")} (${dept.toUpperCase()})`,
-          30,
-          70,
-          {
-            align: "center",
-            width: 535,
-          },
-        );
+        .fillColor("#cccccc")
+        .text(t("system_coordinator_title", "ru"), 30, 70, {
+          align: "center",
+          width: 535,
+        });
 
       doc.moveDown(3);
-      const startY = 100;
-      doc.font(boldFont).fontSize(11).fillColor("#000");
-      doc.text(`MÜŞTERİ: `, 30, startY, { continued: true });
-      doc.font(defaultFont).text(customerName);
+      let currentY = 110;
 
-      doc.font(boldFont).text(`TARİH: `, 400, startY, { continued: true });
-      doc.font(defaultFont).text(new Date().toLocaleDateString("tr-TR"));
+      // --- CUSTOMER INFO ---
+      doc
+        .fillColor("#000")
+        .font(boldFont)
+        .fontSize(12)
+        .text(`${t("customer_label", "ru")}: `, 30, currentY, {
+          continued: true,
+        });
+      doc.font(defaultFont).text(order.customerName);
 
-      doc.moveDown();
-      doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke();
-      doc.moveDown(0.5);
+      doc
+        .font(boldFont)
+        .text(`${t("order_label", "ru")}: `, 30, currentY + 15, {
+          continued: true,
+        });
+      doc.font(defaultFont).text(order.orderNumber);
+
+      doc
+        .font(boldFont)
+        .text(`${t("delivery_label", "ru")}: `, 30, currentY + 30, {
+          continued: true,
+        });
+      doc.font(defaultFont).text(order.deliveryDate);
+
+      currentY += 60;
 
       // --- TABLE HEADER ---
-      const tableTop = doc.y;
-      const colWidths = [120, 150, 50, 185]; // Resim, Ürün, Adet, Detay
-      const colX = [30, 150, 300, 350];
+      const colX = [30, 150, 300, 430]; // Ürün, Detay, Departman, Personel
+      doc.rect(30, currentY, 535, 20).fill("#f2f2f2").stroke("#ccc");
+      doc.fillColor("#000").font(boldFont).fontSize(9);
+      doc.text(t("pdf_table_product", "ru"), colX[0] + 5, currentY + 5);
+      doc.text(t("pdf_table_details", "ru"), colX[1] + 5, currentY + 5);
+      doc.text(t("dept_label", "ru"), colX[2] + 5, currentY + 5);
+      doc.text(t("worker_label", "ru"), colX[3] + 5, currentY + 5);
 
-      doc.rect(30, tableTop, 535, 20).fill("#f2f2f2").stroke("#ccc");
-      doc.fillColor("#000").font(boldFont).fontSize(10);
-      doc.text("FOTO / ФОТО", colX[0] + 5, tableTop + 5);
-      doc.text("ÜRÜN / ПРОДУКТ", colX[1] + 5, tableTop + 5);
-      doc.text("ADET / КОЛ-ВО", colX[2] + 5, tableTop + 5);
-      doc.text("DETAYLAR / ДЕТАЛИ", colX[3] + 5, tableTop + 5);
+      currentY += 20;
 
-      let currentY = tableTop + 20;
-
-      // --- TABLE ROWS ---
-      items.forEach((item, index) => {
-        const rowHeight = 110; // Her satır için sabit veya değişken yükseklik
-
-        // Sayfa sonu kontrolü
+      // --- ROWS ---
+      order.items.forEach((item, index) => {
+        const rowHeight = 45;
         if (currentY + rowHeight > 750) {
           doc.addPage();
           currentY = 30;
+          // Sub-header repeated on new page
+          doc.rect(30, currentY, 535, 20).fill("#f2f2f2").stroke("#ccc");
+          doc.fillColor("#000").font(boldFont).fontSize(9);
+          doc.text(t("pdf_table_product", "ru"), colX[0] + 5, currentY + 5);
+          doc.text(t("pdf_table_details", "ru"), colX[1] + 5, currentY + 5);
+          doc.text(t("dept_label", "ru"), colX[2] + 5, currentY + 5);
+          doc.text(t("worker_label", "ru"), colX[3] + 5, currentY + 5);
+          currentY += 20;
         }
 
-        // Satır çerçevesi
-        doc.rect(30, currentY, 535, rowHeight).stroke("#ccc");
+        doc.rect(30, currentY, 535, rowHeight).stroke("#eee");
 
-        // 1. Resim Sütunu
-        if (item.imageBuffer) {
-          try {
-            doc.image(item.imageBuffer, colX[0] + 5, currentY + 5, {
-              fit: [110, 100],
-              align: "center",
-              valign: "center",
-            });
-          } catch (e) {
-            doc
-              .font(defaultFont)
-              .fontSize(8)
-              .text("[Resim Hatası]", colX[0] + 5, currentY + 45);
-          }
-        } else {
-          doc
-            .font(boldFont)
-            .fontSize(8)
-            .fillColor("#999")
-            .text("GÖRSEL YOK", colX[0] + 30, currentY + 45);
-        }
-
-        // 2. Ürün Adı
-        doc.fillColor("#000").font(boldFont).fontSize(10);
-        doc.text(item.product, colX[1] + 5, currentY + 10, {
-          width: colWidths[1] - 10,
-        });
-
-        // 3. Adet
+        doc
+          .font(boldFont)
+          .fontSize(9)
+          .text(`${index + 1}. ${item.product}`, colX[0] + 5, currentY + 10, {
+            width: 110,
+          });
         doc
           .font(defaultFont)
-          .fontSize(12)
-          .text(item.quantity.toString(), colX[2] + 5, currentY + 10, {
-            width: colWidths[2] - 10,
-            align: "center",
-          });
+          .fontSize(8)
+          .text(item.details || "-", colX[1] + 5, currentY + 5, { width: 140 });
 
-        // 4. Detaylar
-        doc.font(defaultFont).fontSize(9).fillColor("#333");
-        doc.text(item.details, colX[3] + 5, currentY + 10, {
-          width: colWidths[3] - 10,
-        });
+        const ruDept = this.getDeptTranslation(item.department, "ru");
+        doc.text(
+          `${ruDept}\n(${item.department})`,
+          colX[2] + 5,
+          currentY + 10,
+          { width: 120 },
+        );
 
-        // Dikey çizgiler
+        const worker =
+          item.assignedWorker || t("dist_not_assigned", "ru").toUpperCase();
         doc
-          .moveTo(colX[1], currentY)
-          .lineTo(colX[1], currentY + rowHeight)
-          .stroke("#ccc");
-        doc
-          .moveTo(colX[2], currentY)
-          .lineTo(colX[2], currentY + rowHeight)
-          .stroke("#ccc");
-        doc
-          .moveTo(colX[3], currentY)
-          .lineTo(colX[3], currentY + rowHeight)
-          .stroke("#ccc");
+          .font(boldFont)
+          .fillColor(item.assignedWorker ? "#1a73e8" : "#d93025")
+          .text(worker, colX[3] + 5, currentY + 15, { width: 100 });
+        doc.fillColor("#000");
 
         currentY += rowHeight;
       });
 
-      // Footer
-      const footerY = 780;
+      // --- FOOTER ---
       doc
         .fontSize(8)
         .fillColor("#999")
-        .text(
-          "Sandaluci Akıllı Üretim Koordinasyon Sistemi tarafından oluşturulmuştur.",
-          30,
-          footerY,
-          { align: "center", width: 535 },
-        );
+        .text(t("pdf_footer", "ru"), 30, 780, { align: "center", width: 535 });
 
+      doc.end();
+    });
+  }
+
+  /**
+   * Marina için Kumaş Sipariş Raporu PDF'i oluşturur.
+   */
+  async generateFabricOrderPDF(order: OrderDetail): Promise<Buffer> {
+    const fabricItems = order.items.filter(
+      (i) =>
+        i.fabricDetails ||
+        (i.details && i.details.toLowerCase().includes("kumaş")),
+    );
+
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 30, size: "A4" });
+      const chunks: Buffer[] = [];
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", (err: Error) => reject(err));
+
+      const fontRegular = path.join(
+        process.cwd(),
+        "src",
+        "assets",
+        "fonts",
+        "Roboto-Regular.ttf",
+      );
+      const fontBold = path.join(
+        process.cwd(),
+        "src",
+        "assets",
+        "fonts",
+        "Roboto-Bold.ttf",
+      );
+      const defaultFont = fs.existsSync(fontRegular)
+        ? fontRegular
+        : "Helvetica";
+      const boldFont = fs.existsSync(fontBold) ? fontBold : "Helvetica-Bold";
+
+      // HEADER
+      doc.rect(30, 30, 535, 50).fill("#5d4037"); // Brownish color for fabric
+      doc
+        .font(boldFont)
+        .fontSize(16)
+        .fillColor("#ffffff")
+        .text("KUMAŞ SİPARİŞ RAPORU / ЗАКАЗ ТКАНИ", 30, 45, {
+          align: "center",
+          width: 535,
+        });
+
+      let currentY = 100;
+      doc
+        .fillColor("#000")
+        .font(boldFont)
+        .fontSize(11)
+        .text(`${t("customer_label", "ru")}: `, 30, currentY, {
+          continued: true,
+        })
+        .font(defaultFont)
+        .text(order.customerName);
+
+      doc
+        .font(boldFont)
+        .text(`Sipariş No / № Заказа: `, 30, currentY + 15, { continued: true })
+        .font(defaultFont)
+        .text(order.orderNumber);
+
+      currentY += 50;
+
+      fabricItems.forEach((item, index) => {
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 40;
+        }
+
+        doc.rect(30, currentY, 535, 100).stroke("#ccc");
+
+        // Image
+        if (item.imageBuffer) {
+          try {
+            doc.image(item.imageBuffer, 40, currentY + 10, { fit: [80, 80] });
+          } catch (e) {}
+        }
+
+        doc
+          .fillColor("#000")
+          .font(boldFont)
+          .fontSize(10)
+          .text(`${index + 1}. ${item.product}`, 130, currentY + 15);
+
+        const fabric = item.fabricDetails;
+        if (fabric) {
+          doc
+            .font(boldFont)
+            .text(`Kumaş / Ткань: `, 130, currentY + 35, { continued: true })
+            .font(defaultFont)
+            .text(fabric.name || "-");
+          doc
+            .font(boldFont)
+            .text(`Miktar / Кол-во: `, 130, currentY + 50, { continued: true })
+            .font(defaultFont)
+            .text(`${(fabric.amount * (item.quantity || 1)).toFixed(1)} m`);
+        } else {
+          doc
+            .font(defaultFont)
+            .text(item.details || "-", 130, currentY + 35, { width: 400 });
+        }
+
+        currentY += 110;
+      });
+
+      doc
+        .fontSize(8)
+        .fillColor("#999")
+        .text(t("pdf_footer", "ru"), 30, 780, { align: "center", width: 535 });
       doc.end();
     });
   }
@@ -686,7 +951,7 @@ export class OrderService {
   }
 
   /**
-   * Oluşturulan PDF iş emrini yerel klasöre arşivler.
+   * Oluşturulan PDF iş emrini yerel klasöre arşivler. (Marina özeti dahil)
    */
   async archivePDF(deptName: string, pdfBuffer: Buffer): Promise<string> {
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -696,12 +961,12 @@ export class OrderService {
       fs.mkdirSync(pdfDir, { recursive: true });
     }
 
-    const safeDeptName = deptName.replace(/[^a-z0-9]/gi, "_").toUpperCase();
-    const fileName = `is_emri_${safeDeptName}_${Date.now()}.pdf`;
+    const safeName = deptName.replace(/[^a-z0-9]/gi, "_").toUpperCase();
+    const fileName = `is_emri_${safeName}_${Date.now()}.pdf`;
     const filePath = path.join(pdfDir, fileName);
 
     fs.writeFileSync(filePath, pdfBuffer);
-    console.log(`📂 PDF İş Emri arşivlendi: ${filePath}`);
+    console.log(`📂 PDF arşivlendi: ${filePath}`);
     return filePath;
   }
 
@@ -772,21 +1037,28 @@ export class OrderService {
     const today = new Date().toLocaleDateString("tr-TR");
     const now = new Date().toLocaleTimeString("tr-TR");
 
-    let view = `📑 *${dept.toUpperCase()} İŞ EMRİ DETAYI*\n`;
+    const labelProduct = t("product_label", "ru");
+    const labelQuantity = t("order_label", "ru"); // "Quantity" or "Order" can use order_label as proxy or similar
+    const labelDetails = t("details_label", "ru");
+    const labelCustomer = t("customer_label", "ru");
+    const labelDate = t("pdf_date", "ru");
+
+    const ruDeptTitle = this.getDeptTranslation(dept, "ru").toUpperCase();
+    let view = `📑 *${ruDeptTitle} / ${dept.toUpperCase()}*\n`;
     view += `━━━━━━━━━━━━━━━━━━━━\n`;
-    view += `👤 *Müşteri:* ${OrderService.escapeMarkdown(customerName)}\n`;
-    view += `📅 *Tarih:* ${today} | ${now}\n`;
+    view += `👤 *${labelCustomer}:* ${OrderService.escapeMarkdown(customerName)}\n`;
+    view += `📅 *${labelDate}:* ${today} | ${now}\n`;
     view += `━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     items.forEach((item, idx) => {
-      view += `${idx + 1}. *${OrderService.escapeMarkdown(item.product)}*\n`;
-      view += `   🔢 Adet: ${item.quantity}\n`;
-      view += `   📝 Detay: ${OrderService.escapeMarkdown(item.details || "Belirtilmedi")}\n`;
-      view += `   📍 Kaynak: ${item.source === "Stock" ? "Stok" : item.source === "Production" ? "Üretim" : "Dış Alım"}\n\n`;
+      view += `${idx + 1}. *${labelProduct}: ${OrderService.escapeMarkdown(item.product)}*\n`;
+      view += `   🔢 ${labelQuantity}: ${item.quantity}\n`;
+      view += `   📝 ${labelDetails}: ${OrderService.escapeMarkdown(item.details || "Нет / Yok")}\n`;
+      view += `   📍 Kaynak: ${item.source === "Stock" ? "Stok / Склад" : item.source === "Production" ? "Üretim / Производство" : "Dış Alım / Закупка"}\n\n`;
     });
 
     view += `━━━━━━━━━━━━━━━━━━━━\n`;
-    view += `⚠️ _Bu bildirim sistem tarafından otomatik kayıt altına alınmıştır._`;
+    view += `⚠️ _${t("pdf_footer", "ru")}_`;
 
     return view;
   }
@@ -860,17 +1132,21 @@ export class OrderService {
       const uint8Array = new Uint8Array(pdfBuffer);
 
       // Font ve Karakter eşleşmeleri için CMap ve StandardFont yollarını belirle
-      // Windows'ta backslash'leri forward slash'e çevirmek ve file:/// kullanmak gerekir
-      const nodeModulesPath = path
-        .join(process.cwd(), "node_modules", "pdfjs-dist")
-        .replace(/\\/g, "/");
-      const cMapUrl = `file:///${nodeModulesPath}/cmaps/`;
-      const standardFontDataUrl = `file:///${nodeModulesPath}/standard_fonts/`;
+      // Windows'ta pathToFileURL kullanarak düzgün file:// URL oluştur
+      const nodeModulesPath = path.join(
+        process.cwd(),
+        "node_modules",
+        "pdfjs-dist",
+      );
+      const cMapUrl =
+        pathToFileURL(path.join(nodeModulesPath, "cmaps")).href + "/";
+      const standardFontDataUrl =
+        pathToFileURL(path.join(nodeModulesPath, "standard_fonts")).href + "/";
 
       const loadingTask = pdfjsLib.getDocument({
         data: uint8Array,
-        useSystemFonts: false, // Sistem fontlarını kullanma, PDF içindekileri veya standard_fonts'u kullan
-        disableFontFace: true, // Node ortamında font-face yükleme sorunlarını önleyebilir
+        useSystemFonts: true, // Sistem fontlarını kullan (Rusça karakter desteği için)
+        disableFontFace: false, // Font-face kullan (daha iyi render)
         cMapUrl: cMapUrl,
         cMapPacked: true,
         standardFontDataUrl: standardFontDataUrl,
@@ -981,26 +1257,35 @@ export class OrderService {
    * Kumaş durumunu günceller ve not ekler.
    */
   public async updateFabricStatus(
+    orderId: string,
     itemId: string,
     arrived: boolean,
     note?: string,
-  ) {
-    for (const order of this.orders) {
-      const item = order.items.find((i) => i.id === itemId);
-      if (item && item.fabricDetails) {
-        item.fabricDetails.arrived = arrived;
-        if (note) item.fabricDetails.issueNote = note;
-        item.status = arrived ? "bekliyor" : "bekliyor"; // Eksikse de bekliyor ama notu var
-        item.updatedAt = new Date().toISOString();
-        order.updatedAt = new Date().toISOString();
+  ): Promise<boolean> {
+    const order = this.orders.find((o) => o.id === orderId);
+    if (!order) return false;
 
-        // Supabase güncelle
-        await this.supabase.upsertOrderItem(item, order.id);
-        this.saveToLocalFile();
-        return true;
-      }
+    const item = order.items.find((i) => i.id === itemId);
+    if (!item) return false;
+
+    if (!item.fabricDetails) {
+      item.fabricDetails = { name: "Bilinmiyor", amount: 0, arrived: false };
     }
-    return false;
+
+    item.fabricDetails.arrived = arrived;
+    if (note) item.fabricDetails.issueNote = note;
+    item.updatedAt = new Date().toISOString();
+    order.updatedAt = new Date().toISOString();
+
+    if (arrived) {
+      item.lastReminderAt = undefined; // Hatırlatmayı durdur
+      item.status = "bekliyor";
+    }
+
+    // Supabase güncelle
+    await this.supabase.upsertOrderItem(item, order.id);
+    this.saveToLocalFile();
+    return true;
   }
 
   public getOrders() {
@@ -1111,5 +1396,202 @@ export class OrderService {
       }
     }
     return null;
+  }
+
+  /**
+   * Departman için detaylı iş emri PDF'i oluşturur.
+   * Görselleri ve ürün detaylarını içerir. Dil: RU
+   */
+  async generateJobOrderPDF(
+    items: OrderItem[],
+    customerName: string,
+    department: string,
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 30, size: "A4" });
+        const chunks: Buffer[] = [];
+
+        doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", (err: Error) => reject(err));
+
+        const fontRegular = path.join(
+          process.cwd(),
+          "src",
+          "assets",
+          "fonts",
+          "Roboto-Regular.ttf",
+        );
+        const fontBold = path.join(
+          process.cwd(),
+          "src",
+          "assets",
+          "fonts",
+          "Roboto-Bold.ttf",
+        );
+        const defaultFont = fs.existsSync(fontRegular)
+          ? fontRegular
+          : "Helvetica";
+        const boldFont = fs.existsSync(fontBold) ? fontBold : "Helvetica-Bold";
+
+        // --- HEADER ---
+        doc.rect(30, 30, 535, 50).fill("#1a1a1a");
+        const ruDept = this.getDeptTranslation(department, "ru");
+        doc
+          .font(boldFont)
+          .fontSize(16)
+          .fillColor("#ffffff")
+          .text(
+            `${ruDept.toUpperCase()} / ${department.toUpperCase()}`,
+            30,
+            45,
+            {
+              align: "center",
+              width: 535,
+            },
+          );
+
+        doc.moveDown(2);
+        let currentY = 100;
+
+        // --- CUSTOMER INFO ---
+        doc
+          .fillColor("#000")
+          .font(boldFont)
+          .fontSize(12)
+          .text(`${t("customer_label", "ru")}: `, 30, currentY, {
+            continued: true,
+          });
+        doc.font(defaultFont).text(customerName);
+
+        doc.font(boldFont).text(`${t("pdf_date", "ru")}: `, 30, currentY + 15, {
+          continued: true,
+        });
+        doc.font(defaultFont).text(new Date().toLocaleDateString("tr-TR"));
+
+        currentY += 45;
+
+        // --- ITEMS ---
+        items.forEach((item, index) => {
+          if (currentY > 600) {
+            doc.addPage();
+            currentY = 40;
+          }
+
+          // Item Box
+          doc.rect(30, currentY, 535, 150).stroke("#cccccc");
+
+          // Image if exists
+          if (item.imageBuffer) {
+            try {
+              doc.image(item.imageBuffer, 40, currentY + 15, {
+                fit: [120, 120],
+                align: "center",
+                valign: "center",
+              });
+            } catch (e) {
+              doc
+                .fontSize(8)
+                .fillColor("#999")
+                .text(t("pdf_no_image_error", "ru"), 40, currentY + 60);
+            }
+          } else {
+            doc.rect(40, currentY + 15, 120, 120).stroke("#eee");
+            doc
+              .fontSize(8)
+              .fillColor("#999")
+              .text(t("pdf_no_image", "ru"), 65, currentY + 65);
+          }
+
+          // Details
+          doc.fillColor("#000").font(boldFont).fontSize(11);
+          doc.text(`${index + 1}. ${item.product}`, 180, currentY + 20);
+
+          doc.font(boldFont).fontSize(10);
+          doc.text(`${t("order_label", "ru")}:`, 180, currentY + 45, {
+            continued: true,
+          });
+          doc.font(defaultFont).text(` ${item.quantity}`);
+
+          doc
+            .font(boldFont)
+            .text(`${t("details_label", "ru")}:`, 180, currentY + 65);
+          doc
+            .font(defaultFont)
+            .fontSize(9)
+            .text(item.details || "-", 180, currentY + 80, { width: 360 });
+
+          if (item.assignedWorker) {
+            doc
+              .font(boldFont)
+              .text(`${t("worker_label", "ru")}:`, 180, currentY + 120, {
+                continued: true,
+              });
+            doc.font(defaultFont).text(` ${item.assignedWorker}`);
+          }
+
+          currentY += 165;
+        });
+
+        // --- FOOTER ---
+        doc.fontSize(7).fillColor("#aaa").text(t("pdf_footer", "ru"), 30, 790, {
+          align: "center",
+          width: 535,
+        });
+
+        doc.end();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  /**
+   * 24 saat geçmiş ve hala gelmemiş kumaşları bulur.
+   */
+  public getPendingFabricReminders(): {
+    order: OrderDetail;
+    item: OrderItem;
+  }[] {
+    const now = new Date();
+    const reminders: { order: OrderDetail; item: OrderItem }[] = [];
+
+    this.orders.forEach((order) => {
+      order.items.forEach((item) => {
+        const isFabricDept =
+          item.department.toLowerCase().includes("dikiş") ||
+          item.department.toLowerCase().includes("döşeme") ||
+          item.department.toLowerCase() === "kumaş";
+
+        if (isFabricDept && item.fabricDetails && !item.fabricDetails.arrived) {
+          const lastReminder = item.lastReminderAt
+            ? new Date(item.lastReminderAt)
+            : new Date(item.distributedAt || item.createdAt);
+
+          const hoursPassed =
+            (now.getTime() - lastReminder.getTime()) / (1000 * 60 * 60);
+
+          if (hoursPassed >= 24) {
+            reminders.push({ order, item });
+          }
+        }
+      });
+    });
+
+    return reminders;
+  }
+
+  /**
+   * Hatırlatma zamanını günceller.
+   */
+  public updateLastReminder(orderId: string, itemId: string) {
+    const order = this.orders.find((o) => o.id === orderId);
+    if (!order) return;
+    const item = order.items.find((i) => i.id === itemId);
+    if (!item) return;
+
+    item.lastReminderAt = new Date().toISOString();
+    this.saveToLocalFile();
   }
 }

@@ -90,7 +90,7 @@ export class CronService {
       { timezone: "Asia/Almaty" },
     );
 
-    // Cenk Bey: Malzeme Takibi Hatırlatması (Her gün 10:00)
+    // Barış Bey: Malzeme Takibi Hatırlatması (Her gün 10:00)
     cron.schedule(
       "0 10 * * *",
       () => {
@@ -351,18 +351,29 @@ export class CronService {
         const almira =
           dikişhaneStaff.find((s) => s.name.toLowerCase().includes("almira")) ||
           dikişhaneStaff[0];
-        const alertMsg = `⚠️ *KUMAŞ GECİKME UYARISI* (24 Saat Geçti)\n\nMüşteri: ${order.customerName}\nÜrün: ${item.product}\nKumaş: ${item.fabricDetails?.name || "Belirtilmedi"}\n\nBu siparişin kumaş durumu henüz teyit edilmedi!`;
+
+        const lang = almira?.language || "ru";
+        const alertMsg = t("fabric_delay_alert", lang, {
+          customer: order.customerName,
+          product: item.product,
+          fabric: item.fabricDetails?.name || t("status_bekliyor", lang),
+        });
+
         if (almira && almira.telegramId) {
-          await this.bot.api.sendMessage(
-            almira.telegramId,
-            alertMsg +
-              "\n\nLütfen Telegram butonları üzerinden durumu güncelleyin.",
-            { parse_mode: "Markdown" },
-          );
+          await this.bot.api.sendMessage(almira.telegramId, alertMsg, {
+            parse_mode: "Markdown",
+          });
         }
         const marina = this.staffService.getMarina();
         if (marina && marina.telegramId) {
-          await this.bot.api.sendMessage(marina.telegramId, alertMsg, {
+          const marinaLang = marina.language || "ru";
+          const marinaAlert = t("fabric_delay_alert", marinaLang, {
+            customer: order.customerName,
+            product: item.product,
+            fabric:
+              item.fabricDetails?.name || t("status_bekliyor", marinaLang),
+          });
+          await this.bot.api.sendMessage(marina.telegramId, marinaAlert, {
             parse_mode: "Markdown",
           });
         }
@@ -392,7 +403,6 @@ export class CronService {
       const summaryLines: string[] = [];
 
       for (const { order, item } of itemsToCheck) {
-        // İş emrini alan kişiyi bul
         const workerName = item.assignedWorker;
         if (!workerName) continue;
 
@@ -404,7 +414,6 @@ export class CronService {
 
         const workerLang = worker.language || "ru";
 
-        // Son hatırlatma kontrolü (3 gün içinde tekrar sorma)
         if (item.lastReminderAt) {
           const lastReminder = new Date(item.lastReminderAt);
           const daysSinceLast = Math.floor(
@@ -413,7 +422,6 @@ export class CronService {
           if (daysSinceLast < 3) continue;
         }
 
-        // İşçiye soru gönder
         const questionMsg = t("followup_question", workerLang as any, {
           customer: order.customerName,
           product: item.product,

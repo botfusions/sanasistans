@@ -204,6 +204,18 @@ export class StaffService {
     return false;
   }
 
+  public isBoss(telegramId: number): boolean {
+    // 1. .env'deki TELEGRAM_BOSS_ID kontrolü (En güvenli yöntem)
+    const bossId = process.env.TELEGRAM_BOSS_ID;
+    if (bossId && telegramId.toString() === bossId) {
+      return true;
+    }
+
+    // 2. Staff listesindeki role kontrolü (Yedek yöntem)
+    const staff = this.getStaffByTelegramId(telegramId);
+    return staff?.role === "SuperAdmin";
+  }
+
   public getDepartments(): string[] {
     return [
       "Karkas Üretimi",

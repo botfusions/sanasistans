@@ -22,10 +22,20 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Aşama 5: Sesli Komut & Telegram Voice:** Telegram üzerinden gelen sesli mesajları (Voice Message) OpenAI/Grok/Gemini altyapısı ile metne dönüştürüp analiz eden ve ilgili departmanlara not olarak ileten sesli asistan yeteneği kazandırıldı.
 - **Aşama 6: Telegram Excel İşleme (Mart 2026):** Telegram üzerinden gönderilen `.xlsx` ve `.xls` dosyalarını otomatik olarak indiren, `XlsxUtils` ile ayrıştıran ve `OrderService` üzerinden sipariş taslağına dönüştüren uçtan uca dosya işleme akışı entegre edildi.
 - **Aşama 7: Gelişmiş Test Modu & Fallback (Mart 2026):** Departmanlarda kayıtlı personel olmasa bile sistemin tıkanmaması için `StaffService` üzerinden "Otomatik Test Personeli" (Fallback) mantığı eklendi. Tüm dağıtımlar yönetici hesabına yönlendirilerek uçtan uca test imkanı sağlandı.
+- **Aşama 8: Rusça Yerelleştirme & Stabilizasyon (Mart 2026):** Kazakistan bölgesi için tüm raporlar ve PDF iş emirleri **Dual-Language (TR/RU)** formatına geçirildi. `order.service.ts` dosyasındaki syntax hataları giderildi.
+- **Aşama 9: PDF İş Emri & Dashboard Tahliye (Mart 2026):** İş emirlerinin sadece görsel değil, gerçek PDF dosyası olarak iletilmesi sağlandı. Kullanıcı talebi üzerine Dashboard entegrasyonu tamamen askıya alındı.
+- **Aşama 10: Gelişmiş Dil Politikası & Hatırlatıcılar (Mart 2026):** Sistemde Patron (TR) ve Marina/Personel (RU) ayrımı keskinleştirildi. Kumaş/Boya gecikme uyarıları (24 saat kuralı) ve üretim takip soruları tamamen i18n sistemine bağlandı.
+- **Aşama 11: PDF İş Akışı Refaktörü (Mart 2026):** Departman bazlı (Karkas, Metal, Boya) otomatik resimli PDF gönderimi ve manuel departmanlar (Döşeme/Dikiş) için Marina onaylı personel atama süreci optimize edildi.
+- **Aşama 12: Sanal Personel & Test Altyapısı (Mart 2026):** Tüm departmanlar için sanal test personelleri (Personas) oluşturuldu. Test süreçlerini hızlandırmak için tüm birimlerin mesajları Patron ID'sine (Shadowing) yönlendirildi.
+- **Aşama 13: Temiz Mesaj Politikası (Mart 2026):** Mesaj kalabalığını önlemek için ayrı ürün görseli gönderimi kaldırıldı, tüm görsel ve detaylar yüksek kaliteli PDF iş emirlerinde konsolide edildi.
+- **Aşama 14: Kumaş & Özet Raporlama (Mart 2026):** Dağıtım sonunda otomatik "Kumaş Sipariş Formu" (PDF) ve "Genel Sipariş Özet Raporu" (PDF) Marina'ya özel olarak üretilip iletilecek şekilde yapılandırıldı.
+- **Aşama 15: Zamanlanmış Silsile & Sıralı Dağıtım (Mart 2026):** Sipariş dağıtım sürecinde kontrolü artırmak için "20-40-60 Saniye" kuralı getirildi. Otomatik birimler (Karkas, Metal, Boya) 20 saniye sonra, Marina onay butonları 40 saniye sonra, Kumaş PDF'i ise 60 saniye sonra iletilecek şekilde yapılandırıldı. Manuel seçim sonrası final raporu için de +20 saniye gecikme eklendi.
+- **Aşama 16: Gelişmiş Excel Resim Analizi & Temizlik (Mart 2026):** Excel dosyalarından resim çıkarma mantığı (Smart Score) güçlendirildi. Test verilerini hem veritabanından hem de yerel dosyalardan (orders, processed_uids vb.) tamamen temizleyen `cleanup.ts` scripti devreye alındı.
 
-### 3. Bot Stabilitesi & Çakışma Yönetimi (Mart 2026)
+### 3. Bot Stabilitesi & Webhook Mimarisi (Mart 2026)
 
-- **Çatışma Çözümü:** Telegram `409 Conflict` hataları artık sistemi çökertmez. `bot.catch` yapısı ile bot başka bir yerde çalışıyor olsa bile sistem uyarı verir ve diğer servisler (Health Check, API) çalışmaya devam eder.
+- **Webhook Geçişi:** Telegram `409 Conflict` çakışmalarını tamamen önlemek için Polling modundan Webhook mimarisine geçildi.
+- **Dashboard Entegrasyonu (ASKIYA ALINDI):** `/api/external` endpoint'i ve dashboard bildirim trafiği kullanıcı talebiyle geçici olarak devre dışı bırakıldı.
 - **Mail Odaklı Teşhis (Doctor):** Sistem sağlığını sadece internet varlığına göre değil, Gmail SMTP (587) ve IMAP (993) portlarına doğrudan TCP bağlantısı kurarak denetleyen gelişmiş ağ tarayıcısı entegre edildi.
 - **Bölgesel Optimizasyon:** Kazakistan VPS sunucularındaki şebeke gecikmeleri için 300ms tolerans eşiği tanımlanarak gereksiz uyarıların önüne geçildi.
 - **Gelişmiş Health Check:** Coolify entegrasyonu için port 3000 üzerinde `/health` ve `/ping` desteği.
@@ -76,6 +86,6 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 
 ---
 
-> **Not:** Visible Swarm Web Dashboard projesi geliştirme aşamasındadır ve sonraki versiyonlarda aktif edilecektir.
+> **Not:** Dashboard entegrasyonu ( `/api/external`) kullanıcı talebiyle askıya alınmıştır. Sistem şu an saf Telegram & Mail Koordinatörü olarak çalışmaktadır.
 
 _SanaSistans: Geleceğin Mobilya Üretim Teknolojisi - 2026_

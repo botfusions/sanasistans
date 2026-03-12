@@ -1,0 +1,32 @@
+[
+  {
+    "role": "user",
+    "content": "Selam",
+    "timestamp": 1773313732006
+  },
+  {
+    "role": "assistant",
+    "content": "Selam. Sandaluci üretim ve operasyon süreçlerinde size nasıl yardımcı olabilirim?",
+    "timestamp": 1773313733619
+  },
+  {
+    "role": "user",
+    "content": "Sipariş durumu nedir",
+    "timestamp": 1773314110285
+  },
+  {
+    "role": "assistant",
+    "content": "Hangi siparişin durumunu öğrenmek istiyorsunuz? Lütfen **Müşteri Adı** veya **Sipariş Numarası** belirtin, veritabanından güncel durumu kontrol edeyim.",
+    "timestamp": 1773314111797
+  },
+  {
+    "role": "user",
+    "content": "selam",
+    "timestamp": 1773323476253
+  },
+  {
+    "role": "assistant",
+    "content": "Selam. Sandaluci üretim ve operasyon süreçlerinde size nasıl yardımcı olabilirim?",
+    "timestamp": 1773323480108
+  }
+]

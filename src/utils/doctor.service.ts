@@ -262,6 +262,11 @@ export class DoctorService {
     ];
   }
 
+  public async checkSystem(): Promise<string> {
+    const results = await this.runFullDiagnostics();
+    return this.formatReport(results);
+  }
+
   public formatReport(results: DiagnosticResult[]): string {
     const escape = (str: string) =>
       str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

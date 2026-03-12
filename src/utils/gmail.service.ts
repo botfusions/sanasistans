@@ -17,6 +17,7 @@ export interface GmailMessage {
   subject: string;
   date: Date;
   content?: string;
+  source?: Buffer;
   attachments?: GmailAttachment[];
 }
 
@@ -32,7 +33,7 @@ export class GmailService {
       secure: true,
       auth: {
         user: process.env.GMAIL_USER || "",
-        pass: process.env.GMAIL_PASS || "",
+        pass: (process.env.GMAIL_PASS || "").replace(/\s/g, ""),
       },
       logger: false,
       tls: {
@@ -44,7 +45,7 @@ export class GmailService {
       service: "gmail",
       auth: {
         user: process.env.GMAIL_USER || "",
-        pass: process.env.GMAIL_PASS || "",
+        pass: (process.env.GMAIL_PASS || "").replace(/\s/g, ""),
       },
     });
   }
@@ -94,7 +95,7 @@ export class GmailService {
       secure: true,
       auth: {
         user: process.env.GMAIL_USER || "",
-        pass: process.env.GMAIL_PASS || "",
+        pass: (process.env.GMAIL_PASS || "").replace(/\s/g, ""),
       },
       logger: false,
       tls: {
@@ -107,15 +108,24 @@ export class GmailService {
       const lock = await client.getMailboxLock("INBOX");
 
       try {
-        const searchResult = await client.search({ seen: false });
+        logger.info("📡 IMAP: INBOX aranıyor (seen: false)...");
+        const searchResult = await client.search({}, { uid: true });
+        logger.info({ searchResult }, `🔍 IMAP Arama Sonucu`);
+        const count = Array.isArray(searchResult) ? searchResult.length : 0;
+        logger.info(`🔍 IMAP: ${count} adet okunmamış mesaj bulundu.`);
 
-        if (searchResult && searchResult.length > 0) {
+        if (Array.isArray(searchResult) && searchResult.length > 0) {
           const lastIds = searchResult.slice(-limit).reverse();
 
           for (const uid of lastIds) {
-            const raw = (await client.fetchOne(uid.toString(), {
-              source: true,
-            })) as FetchMessageObject;
+            logger.info(`📧 Mesaj UID ${uid} getiriliyor...`);
+            const raw = (await client.fetchOne(
+              uid.toString(),
+              {
+                source: true,
+              },
+              { uid: true },
+            )) as FetchMessageObject;
 
             if (raw && raw.source) {
               const parsed = await simpleParser(raw.source);
@@ -128,14 +138,26 @@ export class GmailService {
                 content: attr.content,
               }));
 
+              let content = parsed.text || "";
+              if (!content && parsed.html) {
+                logger.info(
+                  `📝 UID ${uid} metin içeriği yok, HTML fallback kullanılıyor.`,
+                );
+                content = parsed.html.replace(/<[^>]*>?/gm, " "); // Simple HTML to text
+              }
+
               const msg: GmailMessage = {
                 uid: uid,
                 from: parsed.from?.text || "Unknown",
                 subject: parsed.subject || "(Konu Yok)",
                 date: parsed.date || new Date(),
-                content: parsed.text || "",
+                content: content,
                 attachments: attachments,
               };
+
+              logger.info(
+                `📦 UID ${uid} işlenmeye hazır. Konu: ${msg.subject}`,
+              );
 
               try {
                 // İşlemi yap
@@ -148,7 +170,9 @@ export class GmailService {
               } finally {
                 // Başarıyla işlense de hata alsa da okundu olarak işaretle (sonsuz döngüyü önler)
                 try {
-                  await client.messageFlagsAdd(uid.toString(), ["\\Seen"]);
+                  await client.messageFlagsAdd(uid.toString(), ["\\Seen"], {
+                    uid: true,
+                  });
                   logger.info(`Message ${uid} marked as read.`);
                 } catch (flagError) {
                   logger.error(
@@ -168,5 +192,71 @@ export class GmailService {
     } catch (error) {
       logger.error({ err: error }, "Gmail IMAP error during processing");
     }
+  }
+
+  async fetchOneMessage(uid: number): Promise<GmailMessage | null> {
+    const client = new ImapFlow({
+      host: "imap.gmail.com",
+      port: 993,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER || "",
+        pass: (process.env.GMAIL_PASS || "").replace(/\s/g, ""),
+      },
+      logger: false,
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock("INBOX");
+
+      try {
+        const raw = (await client.fetchOne(
+          uid.toString(),
+          {
+            source: true,
+          },
+          { uid: true },
+        )) as FetchMessageObject;
+
+        if (raw && raw.source) {
+          const parsed = await simpleParser(raw.source);
+
+          const attachments: GmailAttachment[] = (parsed.attachments || []).map(
+            (attr) => ({
+              filename: attr.filename || "unnamed",
+              contentType: attr.contentType,
+              content: attr.content,
+            }),
+          );
+
+          let content = parsed.text || "";
+          if (!content && parsed.html) {
+            // Fallback to HTML if text is empty (common in forwarded emails)
+            content = parsed.html.replace(/<[^>]*>?/gm, " "); // Simple HTML to text
+          }
+
+          return {
+            uid: uid,
+            from: parsed.from?.text || "Unknown",
+            subject: parsed.subject || "(Konu Yok)",
+            date: parsed.date || new Date(),
+            content: content,
+            source: raw.source,
+            attachments: attachments,
+          };
+        }
+      } finally {
+        lock.release();
+      }
+    } catch (err) {
+      logger.error({ err }, `Error fetching message ${uid}`);
+    } finally {
+      await client.logout();
+    }
+    return null;
   }
 }

@@ -109,7 +109,7 @@ export class CommandHandler {
 
   public async handleStaff(ctx: Context) {
     if (!this.isBoss(ctx)) {
-      await ctx.reply("🔒 Ekip listesini sadece Cenk Bey görüntüleyebilir.");
+      await ctx.reply("🔒 Ekip listesini sadece Barış Bey görüntüleyebilir.");
       return;
     }
     const staff = this.staffService.getAllStaff();
@@ -173,7 +173,7 @@ export class CommandHandler {
 
   public async handleRemoveStaff(ctx: Context) {
     if (!this.isBoss(ctx)) {
-      await ctx.reply("🔒 Personel silme yetkisi sadece Cenk Bey'e aittir.");
+      await ctx.reply("🔒 Personel silme yetkisi sadece Barış Bey'e aittir.");
       return;
     }
 

@@ -2,6 +2,7 @@ import { Bot } from "grammy";
 import { DoctorService } from "./doctor.service";
 import { OrderService } from "./order.service";
 import { StaffService } from "./staff.service";
+import { OpenRouterService } from "./llm.service";
 import pino from "pino";
 
 const logger = pino({ name: "ProactiveService", level: "info" });
@@ -10,6 +11,7 @@ export class ProactiveService {
   private doctorService: DoctorService;
   private orderService: OrderService;
   private staffService: StaffService;
+  private llmService: OpenRouterService;
   private bot: Bot;
   private supervisorId: number;
 
@@ -19,6 +21,7 @@ export class ProactiveService {
     this.doctorService = new DoctorService();
     this.orderService = new OrderService();
     this.staffService = StaffService.getInstance();
+    this.llmService = new OpenRouterService();
   }
 
   /**
@@ -49,53 +52,48 @@ export class ProactiveService {
         deptCounts[dept] = (deptCounts[dept] || 0) + 1;
       });
 
-      // 3. Raporlama Kararı
-      let shouldReport = false;
-      let reportContent =
-        "📑 *Süpervizör Teknik & Operasyonel Durum Raporu*\n\n";
+      // 3. Format Data for LLM Evaluation
+      let rawData = `Sistem Sağlık Raporu - ${new Date().toLocaleString("tr-TR")}\n`;
+      rawData += `Kritik Hatalar: ${criticalErrors.length}\n`;
+      rawData += `Aktif Görevler: ${activeItems.length}\n`;
+      rawData += `Atama Bekleyen: ${pendingItems.length}\n`;
+      rawData += `Departman Dağılımı: ${JSON.stringify(deptCounts)}\n`;
 
-      // Teknik Hatalar (Her zaman raporlanırsa shouldReport = true)
       if (criticalErrors.length > 0) {
-        shouldReport = true;
-        reportContent += "🚨 *Kritik Teknik Sorunlar (Acil Müdahale):*\n";
+        rawData += `Hata Detayları:\n`;
         criticalErrors.forEach((err) => {
-          reportContent += `• ${err.service}: ${err.message}\n  👉 _${err.remedy}_\n`;
-        });
-        reportContent += "\n";
-      }
-
-      // Aktif Görev Özeti (İş yükü varsa raporla)
-      if (activeItems.length > 0) {
-        // Eğer bekleyen iş sayısı 3'ten fazlaysa veya kritik bir durum varsa raporu gönder
-        if (pendingItems.length >= 3 || criticalErrors.length > 0) {
-          shouldReport = true;
-        }
-
-        reportContent += `📊 *Genel Görev Durumu:*\n`;
-        reportContent += `• Toplam Aktif Görev: *${activeItems.length}*\n`;
-        reportContent += `• Atama Bekleyen: *${pendingItems.length}*\n\n`;
-
-        if (pendingItems.length > 0) {
-          reportContent += `⚠️ *Bekleyen İş Yükü:* Şu an personel ataması bekleyen görevler var. Üretim akışı için personel seçimi yapılması önerilir.\n\n`;
-        }
-
-        reportContent += `🏢 *Departman Bazlı Dağılım:*\n`;
-        Object.entries(deptCounts).forEach(([dept, count]) => {
-          reportContent += `• ${dept}: ${count} görev\n`;
+          rawData += `- ${err.service}: ${err.message}\n`;
         });
       }
 
-      // 4. Eğer her şey yolundaysa veya küçük sorunlar varsa sessiz kal (Spam önleme)
-      if (shouldReport) {
-        await this.bot.api.sendMessage(this.supervisorId, reportContent, {
-          parse_mode: "Markdown",
-        });
-        logger.info("📩 Süpervizöre proaktif rapor gönderildi.");
+      const prompt = `
+        Aşağıdaki sistem istatistiklerini sandaluci-koordinator skill kurallarına göre değerlendir.
+        - Eğer sistemde hiçbir kritik hata yoksa ve atama bekleyen aşırı acil iş (3'ten az vs) yoksa, sadece ve sadece "HEARTBEAT_OK" cevabını ver. Başka hiçbir şey yazma.
+        - Eğer bir sorun, kritik hata veya yığılma (3'ten fazla atama bekleyen vs.) varsa, durumu Süpervizör'e (Barış Bey'e) bildirmek için kısa, net, profesyonel ve KESİNLİKLE TÜRKÇE bir rapor hazırla.
+        - Raporun dili kesinlikle Türkçe olmalıdır.
+
+        Sistem Verileri:
+        ${rawData}
+      `;
+
+      // 4. Send to LLM
+      const response = await this.llmService.chat(
+        prompt,
+        "Heartbeat Evaluation",
+      );
+
+      if (response && response.trim().includes("HEARTBEAT_OK")) {
+        logger.info("✅ Sistem stabil, LLM onayı alındı. Sessiz kalınıyor.");
       } else {
-        logger.info(
-          "✅ Sistem stabil ve iş yükü normal (Aktif Görev: %d), sessiz kalınıyor.",
-          activeItems.length,
+        // Send LLM's customized Turkish report to supervisor
+        await this.bot.api.sendMessage(
+          this.supervisorId,
+          response || "Sistem raporu oluşturulamadı ama kontrol gerekli.",
+          {
+            parse_mode: "Markdown",
+          },
         );
+        logger.info("📩 Süpervizöre LLM tabanlı proaktif rapor gönderildi.");
       }
     } catch (error: any) {
       logger.error({ err: error }, "❌ Heartbeat çalışırken hata oluştu");

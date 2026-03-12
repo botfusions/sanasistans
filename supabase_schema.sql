@@ -1,3 +1,6 @@
+-- 0. Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- 1. Staff Table
 CREATE TABLE IF NOT EXISTS public.staff (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,4 +77,39 @@ CREATE TABLE IF NOT EXISTS public.visual_memory (
 ALTER TABLE public.visual_memory ENABLE ROW LEVEL SECURITY;
 
 -- Allow all for everyone (Soft RLS)
+-- Allow all for everyone (Soft RLS)
 CREATE POLICY "Allow all" ON public.visual_memory FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. Search Function for Visual Memory
+CREATE OR REPLACE FUNCTION match_visual_memory (
+  query_embedding vector(1024),
+  match_threshold float,
+  match_count int
+)
+RETURNS TABLE (
+  id TEXT,
+  product_name TEXT,
+  customer_name TEXT,
+  order_id TEXT,
+  tags TEXT[],
+  file_path TEXT,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    vm.id,
+    vm.product_name,
+    vm.customer_name,
+    vm.order_id,
+    vm.tags,
+    vm.file_path,
+    1 - (vm.vector <=> query_embedding) AS similarity
+  FROM public.visual_memory vm
+  WHERE 1 - (vm.vector <=> query_embedding) > match_threshold
+  ORDER BY similarity DESC
+  LIMIT match_count;
+END;
+$$;

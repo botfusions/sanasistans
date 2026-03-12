@@ -20,7 +20,7 @@ const translations: Record<string, Record<Language, string>> = {
     ru: "Здравствуйте, {name}! Я Айча. 👋\n\nЯ здесь, чтобы помочь вам в отделе *{department}*.\n\nДоступные команды:\n/durum - Статус производства\n/start - Меню помощи",
   },
   welcome_guest: {
-    tr: "Merhaba! Ben Ayça, Sandaluci Yönetici Asistanıyım. 🙋‍♀️\n\nŞu an sadece kayıtlı personele hizmet verebiliyorum. Lütfen Cenk Bey ile iletişime geçerek kaydınızı yaptırın.",
+    tr: "Merhaba! Ben Ayça, Sandaluci Yönetici Asistanıyım. 🙋‍♀️\n\nŞu an sadece kayıtlı personele hizmet verebiliyorum. Lütfen Barış Bey ile iletişime geçerek kaydınızı yaptırın.",
     ru: "Здравствуйте! Я Айча, ассистент управления Sandaluci. 🙋‍♀️\n\nВ данный момент я обслуживаю только зарегистрированный персонал. Пожалуйста, свяжитесь с руководством для регистрации.",
   },
   access_denied: {
@@ -198,6 +198,136 @@ const translations: Record<string, Record<Language, string>> = {
   followup_summary_marina: {
     tr: "📊 *Takip Özeti*\n\n{summary}",
     ru: "📊 *Сводка отслеживания*\n\n{summary}",
+  },
+
+  // === Raporlama ve PDF Etiketleri ===
+  report_title: {
+    tr: "📊 *SİPARİŞ DAĞITIM RAPORU*",
+    ru: "📊 *ОТЧЕТ О РАСПРЕДЕЛЕНИИ ЗАКАЗОВ*",
+  },
+  customer_label: {
+    tr: "Müşteri",
+    ru: "Клиент",
+  },
+  order_label: {
+    tr: "Sipariş",
+    ru: "Заказ",
+  },
+  delivery_label: {
+    tr: "Termin",
+    ru: "Срок",
+  },
+  product_label: {
+    tr: "Ürün",
+    ru: "Изделие",
+  },
+  dept_label: {
+    tr: "Birim",
+    ru: "Отдел",
+  },
+  worker_label: {
+    tr: "Görevli",
+    ru: "Ответственный",
+  },
+  details_label: {
+    tr: "Detay",
+    ru: "Детали",
+  },
+  pdf_header: {
+    tr: "ÜRETİM İŞ EMRİ / ЗАКАЗ НА ПРОИЗВОДСТВО",
+    ru: "ЗАКАЗ НА ПРОИЗВОДСТВО / ÜRETİM İŞ EMRİ",
+  },
+  pdf_footer: {
+    tr: "Sandaluci Akıllı Üretim Koordinasyon Sistemi tarafından oluşturulmuştur.",
+    ru: "Создано интеллектуальной системой координации Sandaluci.",
+  },
+  pdf_no_image: {
+    tr: "GÖRSEL YOK",
+    ru: "НЕТ ФОТО",
+  },
+  pdf_customer: {
+    tr: "MÜŞTERİ / КЛИЕНТ",
+    ru: "КЛИЕНТ / MÜŞTERİ",
+  },
+  pdf_date: {
+    tr: "TARİH / ДАТА",
+    ru: "ДАТА / TARİH",
+  },
+  pdf_table_photo: {
+    tr: "FOTO / ФОТО",
+    ru: "ФОТО / FOTO",
+  },
+  pdf_table_product: {
+    tr: "ÜRÜN / ПРОДУКТ",
+    ru: "ПРОДУКТ / ÜRÜN",
+  },
+  pdf_table_quantity: {
+    tr: "ADET / КОЛ-ВО",
+    ru: "КОЛ-ВО / ADET",
+  },
+  pdf_table_details: {
+    tr: "DETAYLAR / ДЕТАЛИ",
+    ru: "ДЕТАЛИ / DETAYLAR",
+  },
+  dist_not_assigned: {
+    tr: "⌛ Atama Bekliyor",
+    ru: "⌛ Ожидает назначения",
+  },
+  dist_complete_note: {
+    tr: "✅ _Tüm birimlere iş emirleri iletildi._",
+    ru: "✅ _Заказы отправлены во все отделы._",
+  },
+  summary_title: {
+    tr: "📦 *Sipariş Koordinasyon Özeti*",
+    ru: "📦 *Сводная координация заказа*",
+  },
+  stock_delivery: {
+    tr: "🏬 *STOKTAN TESLİM:*",
+    ru: "🏬 *ИЗ НАЛИЧИЯ (СО СКЛАДА):*",
+  },
+  production_entry: {
+    tr: "🏭 *ÜRETİME GİRECEK:*",
+    ru: "🏭 *В ПРОИЗВОДСТВО:*",
+  },
+  external_purchase: {
+    tr: "🛒 *DIŞ ALIM / TEDARİK:*",
+    ru: "🛒 *ВНЕШНЯЯ ЗАКУПКА / СНАБЖЕНИЕ:*",
+  },
+  coordinator_note: {
+    tr: "🧭 _Ayça koordinasyon planını hazırladı._",
+    ru: "🧭 _Айча подготовила план координации._",
+  },
+  fabric_check_title: {
+    tr: "🧶 <b>Kumaş Kontrolü</b>\n\nMüşteri: {customer}\nÜrün: {product}{fabricInfo}\n\nKumaş depoya geldi mi?",
+    ru: "🧶 <b>Проверка ткани</b>\n\nКлиент: {customer}\nИзделие: {product}{fabricInfo}\n\nТкань поступила на склад?",
+  },
+  btn_fabric_ok: {
+    tr: "✅ Geldi",
+    ru: "✅ Пришла",
+  },
+  btn_fabric_fail: {
+    tr: "❌ Gelmedi",
+    ru: "❌ Не пришла",
+  },
+  fabric_ok_msg: {
+    tr: "✅ Kumaş onayı verildi. Birimlere iş emirleri iletilecek.",
+    ru: "✅ Ткань подтверждена. Заказы будут отправлены в отделы.",
+  },
+  fabric_fail_msg: {
+    tr: "⚠️ Kumaş henüz gelmediği için üretim beklemeye alındı.",
+    ru: "⚠️ Производство приостановлено, так как ткань ещё не поступила.",
+  },
+  pdf_marina_header: {
+    tr: "SİPARİŞ ÖZET RAPORU / СВОДНЫЙ ОТЧЕТ ПО ЗАКАЗУ",
+    ru: "СВОДНЫЙ ОТЧЕТ ПО ЗАКАЗУ / SİPARİŞ ÖZET RAPORU",
+  },
+  system_coordinator_title: {
+    tr: "SİSTEM KOORDİNATÖRÜ / КООРДИНАТОР СИСТЕМЫ",
+    ru: "КООРДИНАТОР СИСТЕМЫ / SİSTEM KOORDİNATÖRÜ",
+  },
+  dept_fabric: {
+    tr: "Kumaş",
+    ru: "Ткань",
   },
 };
 

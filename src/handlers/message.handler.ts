@@ -5,6 +5,7 @@ import { OpenRouterService } from "../utils/llm.service";
 import { StaffService } from "../utils/staff.service";
 import { OrderService } from "../utils/order.service";
 import { VoiceService } from "../utils/voice.service";
+import { memoryService } from "../utils/memory.service";
 
 export class MessageHandler {
   private productionService: ProductionService;
@@ -88,6 +89,23 @@ export class MessageHandler {
     await this.handleGeneralMessage(ctx, originalText, isBoss);
   }
 
+  public async handleCallback(ctx: Context) {
+    if (!ctx.callbackQuery?.data) return;
+
+    const data = ctx.callbackQuery.data;
+
+    // Basit yönlendirme mantığı (Index.ts'dekine benzer buton aksiyonları için)
+    if (data.startsWith("aw:")) {
+      // Atama işlemi
+      await ctx.answerCallbackQuery("İşçi atandı.");
+    } else if (data.startsWith("select_dept_staff:")) {
+      // Personel listesi gösterimi
+      await ctx.answerCallbackQuery();
+    } else if (data.startsWith("reject_order:")) {
+      await ctx.answerCallbackQuery("Sipariş iptal edildi.");
+    }
+  }
+
   private async handleDocument(ctx: Context) {
     const doc = ctx.message?.document;
     if (!doc) return;
@@ -129,53 +147,45 @@ export class MessageHandler {
       const order = await this.orderService.parseAndCreateOrder(
         jsonContent,
         fileName,
-        true,
-        rows,
+        "tg_upload",
+        [],
       );
 
       if (order) {
-        // Taslağı DraftOrderService'e kaydet (index.ts'deki mantıkla uyumlu olması için gerekebilir)
-        // Ancak parseAndCreateOrder zaten persistOrder yapıyor ve orders.json'a kaydediyor.
-        // Kullanıcıya onay raporu gönderelim.
+        // Taslağı DraftOrderService'e kaydet
         const summary = this.orderService.generateVisualTable(order);
-        
-        // Taslak olarak işaretleyip yönetici onayına sunma mantığı index.ts'de DraftOrderService ile yapılmış.
-        // Burada da benzer bir yapı kurabiliriz veya direkt oluşturulan siparişi raporlayabiliriz.
-        // Kullanıcının isteği "maildeki gibi kullanabilir miyiz" olduğu için DraftOrderService'e eklemek daha iyi olabilir.
-
-        const { DraftOrderService } = await import("../utils/draft-order.service");
+        const { DraftOrderService } =
+          await import("../utils/draft-order.service");
         const draftOrderService = DraftOrderService.getInstance();
         const draftId = `tg_${Date.now()}`;
-        
+
         // DraftOrderService beklediği formatta veriyi hazırlayalım
         const floatingImages = (rows as any).floatingImages || [];
-        
-        draftOrderService.saveDraft(
-          draftId,
-          {
-            order: order,
-            images: floatingImages,
-            excelRows: rows
-          }
-        );
 
-        // Yöneticiye/Marina'ya butonlu mesaj gönder (Index.ts handleDraftMessageUpdate'e benzer)
+        draftOrderService.saveDraft(draftId, {
+          order: order,
+          images: floatingImages,
+          excelRows: rows,
+        });
+
+        // Yöneticiye/Marina'ya butonlu mesaj gönder
         const { InlineKeyboard } = await import("grammy");
         const keyboard = new InlineKeyboard();
-        
+
         // Varsayılan atamalar gerekebilir, şimdilik boş bırakalım
-        keyboard.text("🧵 Dikiş Seç", `select_dept_staff:${draftId}|Dikişhane`)
-                .row()
-                .text("🪑 Döşeme Seç", `select_dept_staff:${draftId}|Döşemehane`)
-                .row()
-                .text("❌ İptal", `reject_order:${draftId}`);
+        keyboard
+          .text("🧵 Dikiş Seç", `select_dept_staff:${draftId}|Dikişhane`)
+          .row()
+          .text("🪑 Döşeme Seç", `select_dept_staff:${draftId}|Döşemehane`)
+          .row()
+          .text("❌ İptal", `reject_order:${draftId}`);
 
         await ctx.reply(
           `📝 *Yeni Excel Siparişi (Taslak)*\n\n${summary}\n\nLütfen birimleri atayarak üretimi başlatın.`,
           {
             parse_mode: "Markdown",
             reply_markup: keyboard,
-          }
+          },
         );
       } else {
         await ctx.reply("❌ Sipariş verisi LLM tarafından ayrıştırılamadı.");
@@ -221,7 +231,7 @@ export class MessageHandler {
       );
     } else {
       const greeting = isBoss
-        ? "Cenk Bey"
+        ? "Barış Bey"
         : ctx.from?.first_name || "Ekip Arkadaşım";
 
       await ctx.reply(
@@ -245,6 +255,12 @@ export class MessageHandler {
     const isEmailRequest = emailKeywords.some((kw) => text.includes(kw));
 
     if (isEmailRequest) {
+      if (!isBoss) {
+        await ctx.reply(
+          "❌ E-posta gönderme yetkisi sadece Barış Bey'e aittir.",
+        );
+        return;
+      }
       await this.handleEmailRequest(ctx, text);
       return;
     }
@@ -260,6 +276,12 @@ export class MessageHandler {
     const isReminderRequest = reminderKeywords.some((kw) => text.includes(kw));
 
     if (isReminderRequest) {
+      if (!isBoss) {
+        await ctx.reply(
+          "❌ Hatırlatma kurma yetkisi sadece Barış Bey'e aittir.",
+        );
+        return;
+      }
       await this.handleReminderRequest(ctx, text);
       return;
     }
@@ -292,7 +314,31 @@ export class MessageHandler {
     // Şimdilik sadece bağlantı loguna ekliyoruz, ilerde embedding araması eklenebilir.
     context = "Sandaluci üretim veritabanı aktif (Supabase PGVector).";
 
-    const response = await this.llmService.chat(text, context);
+    // 1. Get recent chat history (last 3 days)
+    const history = await memoryService.getHistory(ctx.chat?.id || "default");
+    const formattedHistory = history.map((h) => ({
+      role: h.role,
+      content: h.content,
+    }));
+
+    // 2. Add current user message to memory
+    await memoryService.saveMessage(ctx.chat?.id || "default", "user", text);
+
+    // 3. Send to LLM with history
+    const response = await this.llmService.chat(
+      text,
+      context,
+      formattedHistory,
+    );
+
+    // 4. Save AI response to memory
+    if (response) {
+      await memoryService.saveMessage(
+        ctx.chat?.id || "default",
+        "assistant",
+        response,
+      );
+    }
 
     // Response'un Barış Bey'e bildirildi. yoksa personele mi gittiğini ayarla
     await ctx.reply(
@@ -303,10 +349,7 @@ export class MessageHandler {
     );
   }
 
-  private async handleEmailRequest(
-    ctx: Context,
-    text: string,
-  ) {
+  private async handleEmailRequest(ctx: Context, text: string) {
     await ctx.reply("📧 E-posta gönderim talebinizi inceliyorum...");
 
     // LLM'den e-posta detaylarını JSON olarak çekelim
@@ -365,10 +408,7 @@ export class MessageHandler {
     }
   }
 
-  private async handleReminderRequest(
-    ctx: Context,
-    text: string,
-  ) {
+  private async handleReminderRequest(ctx: Context, text: string) {
     await ctx.reply("⏰ Hatırlatma talebinizi ayarlıyorum...");
 
     const now = new Date();
@@ -389,7 +429,7 @@ export class MessageHandler {
       - Cron formatı sırasıyla şunlardır: Dakika(0-59) Saat(0-23) Gün(1-31) Ay(1-12) HaftanınGünü(0-7)
       - Örnek: "10 dakika sonra" -> şu anki dakikaya 10 ekle ve mod 60 al. Saati gerekirse artır.
       - Örnek: "Yarın sabah 9'da" -> "0 9 <yarınki_gun> <yarınki_ay> *"
-      - Örnek: "Cenk bey'e karkasları sor" -> mesaj bu olacak.
+      - Örnek: "Barış bey'e karkasları sor" -> mesaj bu olacak.
 
       Lütfen YALNIZCA aşağıdaki JSON formatında yanıt ver, başka hiçbir açıklama ekleme:
       {
@@ -432,7 +472,7 @@ export class MessageHandler {
     } catch (e) {
       console.error("Reminder parsing error:", e);
       await ctx.reply(
-        "❌ Hatırlatma zamanını veya detayını tam anlayamadım, lütfen daha açık yazar mısınız (Örn: '5 dakika sonra Cenk Beye mesaj at' veya 'Yarın sabah 10 da toplantı var de').",
+        "❌ Hatırlatma zamanını veya detayını tam anlayamadım, lütfen daha açık yazar mısınız (Örn: '5 dakika sonra Barış Beye mesaj at' veya 'Yarın sabah 10 da toplantı var de').",
       );
     }
   }

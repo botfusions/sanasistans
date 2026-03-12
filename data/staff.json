@@ -1,12 +1,62 @@
 [
   {
-    "id": "aa60acd6-aa75-485f-bd30-4d1e8a06eff2",
-    "telegramId": 6030287709,
-    "name": "Marina Hanım (Test)",
-    "department": "Kalite Kontrol",
-    "role": "Admin",
+    "id": "f0000000-0000-0000-0000-000000000001",
+    "telegramId": null,
+    "name": "Marina (Boss)",
+    "department": "Marina",
+    "role": "SuperAdmin",
     "phone": null,
     "language": "ru",
-    "isMarina": true
+    "isMarina": false
+  },
+  {
+    "id": "f0000000-0000-0000-0000-000000000002",
+    "telegramId": null,
+    "name": "Dikişhane Ustası",
+    "department": "Dikişhane",
+    "role": "Personnel",
+    "phone": null,
+    "language": "ru",
+    "isMarina": false
+  },
+  {
+    "id": "f0000000-0000-0000-0000-000000000003",
+    "telegramId": null,
+    "name": "Döşemehane Ustası",
+    "department": "Döşemehane",
+    "role": "Personnel",
+    "phone": null,
+    "language": "ru",
+    "isMarina": false
+  },
+  {
+    "id": "f0000000-0000-0000-0000-000000000004",
+    "telegramId": null,
+    "name": "Karkas Departmanı",
+    "department": "Karkas",
+    "role": "Personnel",
+    "phone": null,
+    "language": "ru",
+    "isMarina": false
+  },
+  {
+    "id": "f0000000-0000-0000-0000-000000000005",
+    "telegramId": null,
+    "name": "Metal Departmanı",
+    "department": "Metal",
+    "role": "Personnel",
+    "phone": null,
+    "language": "ru",
+    "isMarina": false
+  },
+  {
+    "id": "f0000000-0000-0000-0000-000000000006",
+    "telegramId": null,
+    "name": "Boya Departmanı",
+    "department": "Boya",
+    "role": "Personnel",
+    "phone": null,
+    "language": "ru",
+    "isMarina": false
   }
 ]
