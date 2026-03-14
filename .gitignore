@@ -15,9 +15,18 @@ dashboard/out/
 # Data & Logs
 *.log
 data/orders/
+data/images/
 data/*.json
 !data/staff.json
 data/*.log
+
+# Project Temp
+*.txt
+*.md
+!README.md
+!brainstorming_report.md
+!socratic_check.md
+!docs/
 
 # Debug
 npm-debug.log*

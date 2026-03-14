@@ -33,6 +33,7 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Aşama 16: Gelişmiş Excel Resim Analizi & Temizlik (Mart 2026):** Excel dosyalarından resim çıkarma mantığı (Smart Score) güçlendirildi. Test verilerini hem veritabanından hem de yerel dosyalardan (orders, processed_uids vb.) tamamen temizleyen `cleanup.ts` scripti devreye alındı.
 - **Aşama 17: Plastik Üretim Akışı & Dikişhane Görünürlüğü (Mart 2026):** "Plastik" içeren ürünlerin otomatik olarak Satınalma (Marina) departmanına Rusça ve resimli olarak yönlendirilmesi sağlandı. Dikişhane ve diğer manuel birimler için departman eşleme mantığı (`isManualDept`) güçlendirilerek tüm dil varyasyonlarında (TR/RU) tam görünürlük sağlandı.
 - **Aşama 18: Gelişmiş Resim Eşleşme & Scope Fix (Mart 2026):** Excel'den çekilen ürün görsellerinin sipariş kalemleriyle (items) eşleşmesini engelleyen scope shadowing hatası giderildi. `RowIndex` mantığı ile %100 doğru görsel-ürün eşleşmesi sağlandı. PDF başlıkları ve departman isimleri Rusça (ПРОИЗВОДСТВО КАРКАСА) için tam yerelleştirildi.
+- **Aşama 19: Git Push & Deployment Stratejisi (Mart 2026):** Tüm kritik hata düzeltmeleri ve yerelleştirme güncellemeleri GitHub'a gönderildi. Netlify (Frontend) ve Coolify (Backend/VPS) ayrımı netleştirilerek kesintisiz çalışma sağlandı.
 
 
 ### 3. Bot Stabilitesi & Webhook Mimarisi (Mart 2026)
@@ -42,6 +43,12 @@ Bu bölüm, projenin başından sonuna kadar geçirdiği evreleri ve teknik baş
 - **Mail Odaklı Teşhis (Doctor):** Sistem sağlığını sadece internet varlığına göre değil, Gmail SMTP (587) ve IMAP (993) portlarına doğrudan TCP bağlantısı kurarak denetleyen gelişmiş ağ tarayıcısı entegre edildi.
 - **Bölgesel Optimizasyon:** Kazakistan VPS sunucularındaki şebeke gecikmeleri için 300ms tolerans eşiği tanımlanarak gereksiz uyarıların önüne geçildi.
 - **Gelişmiş Health Check:** Coolify entegrasyonu için port 3000 üzerinde `/health` ve `/ping` desteği.
+
+### 4. Hybrid Deployment (Netlify & Coolify)
+
+- **Netlify:** Projenin Dashboard/Frontend kısmı için kullanılır. Statik dosyaları ve rapor görüntüleyiciyi barındırır.
+- **Coolify (VPS):** Bot çekirdeği, Gmail servisi ve görsel işleme motoru burada çalışır.
+- **Görsel Senkronizasyon:** Üretilen görseller VPS üzerinde yerel olarak saklanır. Frontend üzerinden erişim için görsellerin Supabase Storage'a taşınması planlanmaktadır (Gelecek Aşama).
 
 ---
 
