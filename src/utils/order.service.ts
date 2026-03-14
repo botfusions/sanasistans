@@ -98,7 +98,11 @@ export class OrderService {
         lowerSubject.includes("welcome") ||
         lowerSubject.includes("verification") ||
         lowerSubject.includes("security alert") ||
+        lowerSubject.includes("deploy") ||
+        lowerSubject.includes("netlify team") ||
+        lowerContent.includes("netlify") ||
         lowerContent.includes("team is ready") ||
+        lowerContent.includes("deploy your first app") ||
         lowerContent.includes("subscription") ||
         lowerContent.includes("billing");
 
